@@ -66,17 +66,64 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function trading(Request $request, MultiSourceMarketService $market)
+    public function trading(Request $request, MultiSourceMarketService $market, StockMarketService $stockMarket, ForexMarketService $forexMarket)
     {
-        $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
+        $symbol = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval = $request->get('interval', '15m');
 
-        $klines = $market->getKlines($symbol, $interval, 200);
-        $depth  = $market->getDepth($symbol, 20);
-        $trades = $market->getRecentTrades($symbol, 30);
-        $ticker = $market->getTicker24hr($symbol);
+        // Determine Asset Type
+        $type = 'crypto';
+        $cleanSymbol = $symbol;
+        
+        if (str_starts_with($symbol, 'stock:')) {
+            $type = 'stock';
+            $cleanSymbol = str_replace('stock:', '', $symbol);
+        } elseif (str_starts_with($symbol, 'forex:')) {
+            $type = 'forex';
+            $cleanSymbol = str_replace('forex:', '', $symbol);
+        } elseif (str_ends_with($symbol, 'USDT') || str_ends_with($symbol, 'USD')) {
+            $type = 'crypto';
+        }
+        
+        if ($cleanSymbol === 'XAU' || $cleanSymbol === 'PAXGUSDT' || $cleanSymbol === 'XAG') {
+            $type = 'commodity';
+        }
 
-        return view('trading.index', compact('symbol', 'interval', 'klines', 'depth', 'trades', 'ticker'));
+        $quote = null;
+        $profile = null;
+        $klines = [];
+        $depth = ['bids' => [], 'asks' => []];
+        $trades = [];
+        $ticker = null;
+
+        if ($type === 'stock') {
+            $quote = $stockMarket->getStockQuote($cleanSymbol);
+            $profile = $stockMarket->getStockProfile($cleanSymbol);
+            // Klines for stocks will be fetched via AJAX in the view for consistency with Asset page
+        } elseif ($type === 'crypto' || $type === 'commodity') {
+            $klines = $market->getKlines($cleanSymbol, $interval, 200);
+            $depth  = $market->getDepth($cleanSymbol, 20);
+            $trades = $market->getRecentTrades($cleanSymbol, 30);
+            $ticker = $market->getTicker24hr($cleanSymbol);
+        } elseif ($type === 'forex') {
+            $rates = $forexMarket->getForexRates();
+            $cur = str_replace(['/', 'USD'], '', reset((explode(':', $symbol))));
+            if (empty($cur)) $cur = $cleanSymbol;
+            
+            if (isset($rates['rates'][$cur])) {
+                $r = $rates['rates'][$cur];
+                $quote = [
+                    'symbol' => $r['display'],
+                    'price' => $r['rate'],
+                    'change_pct' => 0,
+                ];
+            }
+        }
+
+        return view('trading.index', compact(
+            'symbol', 'cleanSymbol', 'interval', 'type', 
+            'klines', 'depth', 'trades', 'ticker', 'quote', 'profile'
+        ));
     }
 
     public function scanner(MultiSourceMarketService $market)

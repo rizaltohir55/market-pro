@@ -1,30 +1,51 @@
 @extends('layouts.app')
 
-@section('title', 'Trading — ' . ($symbol === 'PAXGUSDT' ? 'XAU/USD' : $symbol))
-@section('page-title', ($symbol === 'PAXGUSDT' ? 'XAU/USD' : str_replace('USDT', '/USDT', $symbol)) . ' Trading View')
+@section('title', 'Trading — ' . ($type === 'stock' ? ($profile['name'] ?? $cleanSymbol) : ($symbol === 'PAXGUSDT' ? 'XAU/USD' : $symbol)))
+@section('page-title', $type === 'stock' ? 'Asset Analysis: ' . ($profile['name'] ?? $cleanSymbol) : (($symbol === 'PAXGUSDT' ? 'XAU/USD' : str_replace('USDT', '/USDT', $symbol)) . ' Trading View'))
 
 @section('content')
 {{-- Symbol Header --}}
 <div style="display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-2)">
     <span class="text-h2 text-mono" id="tv-price">
-        @if($ticker)
+        @if($type === 'stock' || $type === 'forex')
+            @if($quote && isset($quote['price']))
+                ${{ number_format((float)$quote['price'], 2) }}
+            @else
+                <span class="text-muted">Loading...</span>
+            @endif
+        @elseif($ticker)
             ${{ number_format((float)$ticker['lastPrice'], 2) }}
         @else
             <span class="text-muted">Loading...</span>
         @endif
     </span>
-    @if($ticker)
-    <span class="kpi-delta {{ (float)$ticker['priceChangePercent'] >= 0 ? 'positive' : 'negative' }}">
-        {{ (float)$ticker['priceChangePercent'] >= 0 ? '▲' : '▼' }}
-        {{ number_format(abs((float)$ticker['priceChangePercent']), 2) }}%
-    </span>
-    <span class="text-caption">
-        H: ${{ number_format((float)$ticker['highPrice'], 2) }}
-        &nbsp;L: ${{ number_format((float)$ticker['lowPrice'], 2) }}
-        &nbsp;Vol: {{ number_format((float)$ticker['quoteVolume'] / 1e6, 1) }}M USDT
-    </span>
+    
+    @if($type === 'stock' || $type === 'forex')
+        @if($quote && isset($quote['change_pct']))
+        <span class="kpi-delta {{ (float)$quote['change_pct'] >= 0 ? 'positive' : 'negative' }}">
+            {{ (float)$quote['change_pct'] >= 0 ? '▲' : '▼' }}
+            {{ number_format(abs((float)$quote['change_pct']), 2) }}%
+        </span>
+        @endif
+        @if($type === 'stock' && $quote)
+        <span class="text-caption">
+            H: ${{ number_format((float)($quote['high'] ?? 0), 2) }}
+            &nbsp;L: ${{ number_format((float)($quote['low'] ?? 0), 2) }}
+            &nbsp;Vol: {{ number_format((float)($quote['volume'] ?? 0) / 1e6, 2) }}M
+        </span>
+        @endif
+    @elseif($ticker)
+        <span class="kpi-delta {{ (float)$ticker['priceChangePercent'] >= 0 ? 'positive' : 'negative' }}">
+            {{ (float)$ticker['priceChangePercent'] >= 0 ? '▲' : '▼' }}
+            {{ number_format(abs((float)$ticker['priceChangePercent']), 2) }}%
+        </span>
+        <span class="text-caption">
+            H: ${{ number_format((float)$ticker['highPrice'], 2) }}
+            &nbsp;L: ${{ number_format((float)$ticker['lowPrice'], 2) }}
+            &nbsp;Vol: {{ number_format((float)$ticker['quoteVolume'] / 1e6, 1) }}M USDT
+        </span>
+        <span id="stream-badge" class="badge badge-neutral" style="margin-left:auto">Connecting...</span>
     @endif
-    <span id="stream-badge" class="badge badge-neutral" style="margin-left:auto">Connecting...</span>
 </div>
 
 <style>
@@ -128,10 +149,12 @@
         </div>
     </div>
 
-    {{-- Right Sidebar: Floating Dock (HUD + Orderbook + Trades) --}}
+    {{-- Right Sidebar: Floating Dock (HUD + Orderbook + Trades for Crypto, Stats for Stocks) --}}
     <div class="side-dock fade-in-up" style="--delay: 0.3s;">
-        {{-- Futuristic Prediction HUD --}}
-        <div class="panel acrylic animated-border" style="flex-shrink: 0; padding: 1px;">
+        @if($type === 'crypto' || $type === 'commodity')
+            {{-- Futuristic Prediction HUD --}}
+            <div class="panel acrylic animated-border" style="flex-shrink: 0; padding: 1px;">
+                <!-- ... existing prediction HUD ... -->
             <div style="background: var(--bg-surface); backdrop-filter: blur(20px); border-radius: calc(var(--radius-xl) - 1px); padding: var(--space-4); height: 100%;">
                 <div class="panel-header" style="justify-content:space-between; border-bottom:none; padding-bottom:0; padding-left:0; padding-right:0">
                     <span class="panel-title" style="text-shadow: 0 0 10px rgba(59, 130, 246, 0.4)">
@@ -180,55 +203,79 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        {{-- Order Book Dock --}}
-        <div class="panel acrylic" style="flex-shrink: 0">
-            <div class="panel-header" style="padding-bottom:var(--space-2); border-bottom: none">
-                <span class="panel-title">Order Book</span>
-                <span class="text-small">Depth: 15</span>
-            </div>
-            <div class="panel-body no-padding">
-                <div class="orderbook" id="orderbook">
-                    <div style="padding:2px var(--space-4);display:grid;grid-template-columns:1fr 1fr 1fr;font-size:0.6875rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;font-family:var(--font-mono)">
-                        <span>Price</span><span class="align-right">Amount</span><span class="align-right">Total</span>
-                    </div>
-
-                    {{-- Asks --}}
-                    <div id="ob-asks" style="max-height:180px;overflow:hidden;display:flex;flex-direction:column-reverse;padding:0 var(--space-2)">
-                        <div style="padding:var(--space-3);color:var(--text-muted);text-align:center;font-size:0.75rem">Loading orderbook...</div>
-                    </div>
-
-                    {{-- Spread --}}
-                    <div class="orderbook-spread" style="margin: 4px 0; background: rgba(0,0,0,0.2); padding: 4px; text-align: center; border-radius: 4px">
-                        — Spread unavailable —
-                    </div>
-
-                    {{-- Bids --}}
-                    <div id="ob-bids" style="max-height:180px;overflow:hidden;padding:0 var(--space-2)">
-                        <div style="padding:var(--space-3);color:var(--text-muted);text-align:center;font-size:0.75rem">Loading orderbook...</div>
+        @else
+            {{-- Stock/Forex Key Stats --}}
+            <div class="panel acrylic" style="flex-shrink: 0">
+                <div class="panel-header">
+                    <span class="panel-title">Key Statistics</span>
+                </div>
+                <div class="panel-body no-padding">
+                    <div style="padding: var(--space-4); display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+                        @if($type === 'stock' && $profile && isset($profile['fundamentals']))
+                            @php $f = $profile['fundamentals']; @endphp
+                            <div class="stat-item">
+                                <div class="stat-label">Market Cap</div>
+                                <div class="stat-value">${{ number_format(($profile['market_cap'] ?? 0)/1e9, 2) }}B</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">P/E Ratio</div>
+                                <div class="stat-value">{{ number_format((float)($f['pe_ratio'] ?? 0), 2) }}</div>
+                            </div>
+                            <!-- ... other stats ... -->
+                        @else
+                            <div class="stat-item">
+                                <div class="stat-label">Type</div>
+                                <div class="stat-value" style="text-transform: capitalize;">{{ $type }}</div>
+                            </div>
+                            @if(isset($quote['volume']))
+                            <div class="stat-item">
+                                <div class="stat-label">24h Volume</div>
+                                <div class="stat-value">{{ number_format($quote['volume'], 2) }}</div>
+                            </div>
+                            @endif
+                        @endif
                     </div>
                 </div>
             </div>
-        </div>
 
-        {{-- Recent Trades Dock --}}
-        <div class="panel acrylic" style="flex-shrink: 0; margin-bottom: var(--space-4)">
-            <div class="panel-header" style="border-bottom:none">
-                <span class="panel-title">Market Trades</span>
-            </div>
-            <div class="panel-body no-padding" style="max-height:200px;overflow-y:auto">
-                <table class="data-table" id="trades-table" style="font-size:0.75rem">
-                    <thead style="display:none">
-                        <tr>
-                            <th>Price</th><th class="align-right">Amount</th><th class="align-right">Time</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td colspan="3" class="text-center" style="padding:var(--space-4);color:var(--text-muted)">Loading trades...</td></tr>
-                    </tbody>
-                </table>
-            </div>
+            @if($type === 'stock')
+                <div class="panel acrylic" style="flex-shrink: 0">
+                    <div class="panel-header">
+                        <span class="panel-title">Analyst Recommendations</span>
+                    </div>
+                    <div class="panel-body" id="analyst-rec-container">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 2rem;">Loading recommendations...</div>
+                    </div>
+                </div>
+                
+                <div class="panel acrylic" style="flex: 1;">
+                    <div class="panel-header">
+                        <span class="panel-title">🔗 Peer Comparison</span>
+                    </div>
+                    <div class="panel-body no-padding" style="overflow-y: auto;">
+                        <table class="data-table" id="peer-table">
+                            <thead>
+                                <tr><th>Symbol</th><th>Price</th><th class="align-right">Mkt Cap</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="3" style="text-align:center; padding: 2rem; color: var(--text-muted)">Loading peers...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endif
+        @endif
+    </div>
+</div>
+
+{{-- Bottom section: News (Unified) --}}
+<div class="grid-1 fade-in-up" style="--delay: 0.4s; margin-top: var(--space-4)">
+    <div class="panel acrylic">
+        <div class="panel-header">
+            <span class="panel-title">📰 Related News</span>
+        </div>
+        <div class="panel-body no-padding" style="max-height: 400px; overflow-y: auto;" id="news-container">
+            <div style="padding: 2rem; color: var(--text-muted); text-align: center;">Loading news...</div>
         </div>
     </div>
 </div>
@@ -248,6 +295,8 @@
 @section('scripts')
 <script>
 const SYMBOL = '{{ $symbol }}';
+const ASSET_TYPE = '{{ $type }}';
+const ASSET_SYMBOL = '{{ $cleanSymbol }}';
 let currentInterval = '{{ $interval }}';
 const initialKlines = @json($klines);
 
@@ -259,9 +308,23 @@ document.addEventListener('DOMContentLoaded', function() {
         fetchAndRenderChart(SYMBOL, currentInterval);
     }
     
-    // Replace manual polling with Server-Sent Events
-    initSSE();
-    initBinanceWS();
+    // Conditional logic for Crypto/Commodity vs Stocks/Forex
+    if (ASSET_TYPE === 'crypto' || ASSET_TYPE === 'commodity') {
+        initSSE();
+        initBinanceWS();
+    } else {
+        // For Stocks/Forex, hide crypto-only elements if they exist
+        const badge = document.getElementById('stream-badge');
+        if (badge) badge.style.display = 'none';
+        
+        if (ASSET_TYPE === 'stock') {
+            fetchAnalystRecs();
+            fetchPeers();
+        }
+    }
+    
+    // News is global
+    fetchNews();
     
     initTimeframeSelector();
 });
@@ -536,11 +599,27 @@ async function fetchAndRenderChart(symbol, interval) {
     if (container) container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">Loading chart from server...</div>';
     
     let loaded = false;
+    let url = `{{ url('/api/market/klines') }}?symbol=${symbol}&interval=${interval}&limit=200`;
+
+    if (ASSET_TYPE === 'stock') {
+        const now = Math.floor(Date.now() / 1000);
+        let from = now - (365 * 86400); 
+        if (interval === 'W' || interval === '1w') from = now - (365 * 3 * 86400);
+        if (interval === 'M' || interval === '1M') from = now - (365 * 5 * 86400);
+        
+        // Map common intervals to Finnhub style if needed, though our stock-candles usually takes D, W, M
+        let res = interval;
+        if (res === '1d') res = 'D';
+        if (res === '1w') res = 'W';
+        if (res === '1M') res = 'M';
+
+        url = `/api/market/stock-candles?symbol=${ASSET_SYMBOL}&resolution=${res}&from=${from}&to=${now}`;
+    }
     
     // 1. Always try local Laravel API FIRST (most reliable in this env)
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            const r = await fetch(`{{ url('/api/market/klines') }}?symbol=${symbol}&interval=${interval}&limit=200`, { signal: AbortSignal.timeout(15000) });
+            const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
             if (r.ok) {
                 const data = await r.json();
                 if (data && data.length > 0) {
@@ -554,7 +633,7 @@ async function fetchAndRenderChart(symbol, interval) {
     }
     
     if (!loaded && container) {
-        container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)"><div class="empty-state"><div class="empty-state-icon">📡</div><div class="empty-state-title">Could not load chart data</div><div class="empty-state-desc">Server cannot reach Binance API. Check your network connection.</div></div></div>';
+        container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)"><div class="empty-state"><div class="empty-state-icon">📡</div><div class="empty-state-title">Could not load chart data</div><div class="empty-state-desc">Server cannot reach API. Check your network connection.</div></div></div>';
     }
 }
 
@@ -840,13 +919,120 @@ function formatPrice(price) {
     if (price >= 0.01) return price.toFixed(4);
     return price.toFixed(6);
 }
+
+// ─── DATA FETCHERS (STOCKS/NEWS) ──────────────────────────────
+function fetchAnalystRecs() {
+    fetch(`/api/market/analyst-estimates?symbol=${ASSET_SYMBOL}`)
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('analyst-rec-container');
+            if(!container) return;
+            if(!data || !data.recommendation) {
+                container.innerHTML = `<div style="padding:1rem;color:var(--text-muted);text-align:center">No data available</div>`;
+                return;
+            }
+            const rec = data.recommendation;
+            let txt = 'HOLD';
+            if (rec.mean < 2) txt = 'STRONG BUY';
+            else if (rec.mean < 3) txt = 'BUY';
+            else if (rec.mean > 4) txt = 'STRONG SELL';
+            else if (rec.mean > 3) txt = 'SELL';
+            
+            const color = rec.mean < 3 ? 'var(--success)' : (rec.mean > 3 ? 'var(--danger)' : 'var(--text-primary)');
+            const total = rec.strongBuy + rec.buy + rec.hold + rec.sell + rec.strongSell;
+            
+            container.innerHTML = `
+                <div style="display:flex; justify-content: space-between; margin-bottom: var(--space-3)">
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">Target Mean</div>
+                        <div class="text-mono" style="font-size: 1.5rem; font-weight: 700; color: var(--accent)">${rec.targetMean ? '$'+rec.targetMean.toFixed(2) : '--'}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">Consensus</div>
+                        <div style="font-size: 1.2rem; font-weight: 700; color: ${color};">${txt}</div>
+                    </div>
+                </div>
+                ${total > 0 ? `
+                <div style="margin-top: 1rem;">
+                    <div style="display:flex; height: 12px; border-radius: 6px; overflow:hidden;">
+                        <div style="width:${(rec.strongBuy/total)*100}%; background:#22c55e" title="Strong Buy: ${rec.strongBuy}"></div>
+                        <div style="width:${(rec.buy/total)*100}%; background:#86efac" title="Buy: ${rec.buy}"></div>
+                        <div style="width:${(rec.hold/total)*100}%; background:#94a3b8" title="Hold: ${rec.hold}"></div>
+                        <div style="width:${(rec.sell/total)*100}%; background:#fca5a5" title="Sell: ${rec.sell}"></div>
+                        <div style="width:${(rec.strongSell/total)*100}%; background:#ef4444" title="Strong Sell: ${rec.strongSell}"></div>
+                    </div>
+                </div>
+                ` : ''}
+            `;
+        });
+}
+
+function fetchPeers() {
+    fetch(`/api/market/peer-comparison?symbol=${ASSET_SYMBOL}`)
+        .then(r => r.json())
+        .then(peers => {
+            const tbody = document.querySelector('#peer-table tbody');
+            if(!tbody) return;
+            if(!peers || !peers.length) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">No peer data found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = peers.map(p => {
+                const mcap= p.market_cap ? (p.market_cap / 1e9).toFixed(2)+'B' : '--';
+                return `<tr style="cursor:pointer;" onclick="window.location.href='/trading?symbol=stock:${p.symbol}'">
+                    <td style="font-weight:bold; color: var(--accent)">${p.symbol}</td>
+                    <td class="text-mono">$${(p.price||0).toFixed(2)}</td>
+                    <td class="align-right text-mono">${mcap}</td>
+                </tr>`;
+            }).join('');
+        });
+}
+
+function fetchNews() {
+    let newsUrl = `/api/market/news?category=general`;
+    if (ASSET_TYPE === 'stock') newsUrl = `/api/market/company-news?symbol=${ASSET_SYMBOL}`;
+    else if (ASSET_TYPE === 'crypto' || ASSET_TYPE === 'commodity') newsUrl = `/api/market/news?category=crypto`;
+    else if (ASSET_TYPE === 'forex') newsUrl = `/api/market/news?category=forex`;
+
+    fetch(newsUrl)
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('news-container');
+            if(!container) return;
+            const articles = Array.isArray(data) ? data : (data.articles || []);
+            
+            if (!articles.length) {
+                container.innerHTML = '<div style="padding: 2rem; color: var(--text-muted); text-align: center;">No related news found.</div>';
+                return;
+            }
+            
+            let html = '';
+            articles.slice(0, 6).forEach(n => {
+                const img = n.image ? `<img src="${n.image}" alt="thumb" style="width:60px; height:60px; object-fit:cover; border-radius: var(--radius-sm); margin-right: var(--space-3);">` : '';
+                const timeStr = n.datetime ? new Date(n.datetime * 1000).toLocaleString() : '';
+                html += `
+                <a href="${n.url}" target="_blank" style="display:flex; padding: var(--space-3); border-bottom: 1px solid rgba(255,255,255,0.05); text-decoration: none; color: inherit; transition: background 0.2s;">
+                    ${img}
+                    <div style="flex: 1;">
+                        <h4 style="margin: 0 0 4px 0; font-size: 0.9rem; color: var(--text-primary);">${n.headline}</h4>
+                        <div style="font-size: 0.7rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                            <span>${n.source}</span>
+                            <span>${timeStr}</span>
+                        </div>
+                    </div>
+                </a>`;
+            });
+            container.innerHTML = html;
+        });
+}
 // ─── BINANCE WEBSOCKET FOR REALTIME CHART ─────────────────────
 let binanceWS = null;
 function initBinanceWS() {
     if (binanceWS) binanceWS.close();
     
+    if (ASSET_TYPE !== 'crypto') return; // Only crypto has a public WS stream from Binance here
     let wsInterval = currentInterval.toLowerCase();
-    binanceWS = new WebSocket(`wss://data-stream.binance.vision/ws/${SYMBOL.toLowerCase()}@kline_${wsInterval}`);
+    binanceWS = new WebSocket(`wss://data-stream.binance.vision/ws/${SYMBOL.toLowerCase().replace('stock:','').replace('forex:','') }@kline_${wsInterval}`);
     
     binanceWS.onmessage = (event) => {
         try {

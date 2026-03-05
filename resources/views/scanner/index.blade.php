@@ -19,7 +19,7 @@
                 <option value="price">Price ↓</option>
                 <option value="trades">Trades ↓</option>
             </select>
-            <button class="btn btn-ghost btn-sm" id="scanner-refresh" style="flex:1">
+            <button aria-label="Refresh Scanner" class="btn btn-ghost btn-sm" id="scanner-refresh" style="flex:1">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 Refresh
             </button>

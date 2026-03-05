@@ -197,6 +197,7 @@ window.MarketAPI = {
 import { Watchlist } from './watchlist';
 import { WebSocketManager } from './websocket';
 import { GlobalSearch } from './search';
+import { Dashboard } from './dashboard';
 
 // Re-implement missing initGlobalNewsTicker
 window.initGlobalNewsTicker = async function () {
@@ -254,6 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     WebSocketManager.init();
     Watchlist.init();
     GlobalSearch.init();
+    Dashboard.init();
     if (typeof window.initGlobalNewsTicker === 'function') {
         window.initGlobalNewsTicker();
     }

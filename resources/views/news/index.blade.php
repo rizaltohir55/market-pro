@@ -33,7 +33,7 @@
     <div style="display:flex; align-items:center; gap:12px;">
         <input type="text" id="news-filter-input" placeholder="Filter articles..." class="acrylic" style="padding:4px 8px; border-radius:4px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:#fff; font-size:0.75rem; width:150px;">
         <span id="news-count" style="font-size:0.68rem; color:var(--text-muted);"></span>
-        <button class="btn btn-ghost btn-sm" onclick="refreshNews()" style="font-size:0.68rem; gap:4px;">
+        <button aria-label="Refresh News" class="btn btn-ghost btn-sm" onclick="refreshNews()" style="font-size:0.68rem; gap:4px;">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             Refresh
         </button>
@@ -237,7 +237,7 @@ function renderNews() {
         const iconColor = isSaved ? 'var(--warning, #ffb400)' : 'rgba(255,255,255,0.4)';
         const fill = isSaved ? 'currentColor' : 'none';
         const json = encodeURIComponent(JSON.stringify(a).replace(/'/g, "&apos;"));
-        return `<button class="btn btn-ghost btn-sm news-bk-btn" onclick="toggleBookmark(event, '${json}')" style="padding:4px; color:${iconColor};" title="Save Article">
+        return `<button aria-label="Save Article" class="btn btn-ghost btn-sm news-bk-btn" onclick="toggleBookmark(event, '${json}')" style="padding:4px; color:${iconColor};" title="Save Article">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="${fill}" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
         </button>`;
     }

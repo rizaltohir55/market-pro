@@ -10,7 +10,9 @@ Route::get('/analysis', [DashboardController::class, 'analysis'])->name('analysi
 Route::get('/settings', [DashboardController::class, 'settings'])->name('settings');
 
 // ─── Phase 4 New Market Pages ─────────────────────────────────────────────
-Route::get('/asset', [\App\Http\Controllers\AssetController::class, 'show'])->name('asset.show');
+Route::get('/asset', function (\Illuminate\Http\Request $request) {
+    return redirect()->route('trading', $request->all());
+});
 Route::get('/equity', [DashboardController::class, 'equity'])->name('equity');
 Route::get('/fx-rates', [DashboardController::class, 'fxRates'])->name('fx-rates');
 Route::get('/derivatives', [DashboardController::class, 'derivatives'])->name('derivatives');

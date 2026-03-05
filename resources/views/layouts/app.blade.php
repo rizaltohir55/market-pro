@@ -50,7 +50,7 @@
                     <svg class="logo-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
                     <span>MARKET<span class="logo-pro">PRO</span></span>
                 </span>
-                <button class="btn btn-ghost btn-icon sidebar-close-btn" id="sidebar-close">
+                <button aria-label="Close Sidebar" class="btn btn-ghost btn-icon sidebar-close-btn" id="sidebar-close">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
             </div>
@@ -132,7 +132,7 @@
         {{-- ═══ TOPBAR ═══ --}}
         <header class="topbar">
             <div class="topbar-left">
-                <button class="btn btn-ghost btn-icon menu-toggle menu-toggle-btn" id="menu-toggle">
+                <button aria-label="Toggle Menu" class="btn btn-ghost btn-icon menu-toggle menu-toggle-btn" id="menu-toggle">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
                 </button>
                 <h1 class="topbar-title">@yield('page-title', 'Dashboard Overview')</h1>

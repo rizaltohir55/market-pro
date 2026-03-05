@@ -142,7 +142,7 @@ export const Watchlist = {
 
     renderStockPairs(data) {
         return data.slice(0, 25).map(s => {
-            const nav = `window.location='/asset?symbol=stock:${s.symbol}'`;
+            const nav = `window.location='/trading?symbol=stock:${s.symbol}'`;
             return this.pairItem(s.symbol, s.name || s.symbol, s.price, s.change_pct, nav);
         });
     },
@@ -168,7 +168,7 @@ export const Watchlist = {
             const displayPrice = parseFloat(rateObj[field]);
             const decimals = (cur === 'JPY' || cur === 'IDR') ? 2 : 4;
             const priceStr = isNaN(displayPrice) ? '—' : displayPrice.toFixed(decimals);
-            const nav = `window.location='/asset?symbol=${cur}'`;
+            const nav = `window.location='/trading?symbol=forex:${cur}'`;
             return `<div class="watchlist-item" title="${label}" onclick="${nav}" data-symbol="${cur}">
                 <span class="wl-symbol">${label}</span>
                 <span class="wl-name" style="font-size:0.6rem">${cur}</span>
@@ -180,7 +180,7 @@ export const Watchlist = {
 
     renderCommodityPairs(data) {
         return data.map(c => {
-            const nav = `window.location='/asset?symbol=${c.symbol === 'XAU' ? 'PAXGUSDT' : c.symbol === 'BTC' ? 'BTCUSDT' : c.symbol}'`;
+            const nav = `window.location='/trading?symbol=${c.symbol === 'XAU' ? 'PAXGUSDT' : c.symbol === 'BTC' ? 'BTCUSDT' : c.symbol}'`;
             return this.pairItem(c.symbol, c.name || c.symbol, c.price, c.change_pct, nav);
         });
     },

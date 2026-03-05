@@ -49,7 +49,7 @@
             <span class="panel-title">⚡ Crypto Perpetuals (Binance)</span>
             <div class="panel-actions">
                 <span id="fut-update-time" style="font-size: 0.7rem; color: var(--text-muted); margin-right: 8px;"></span>
-                <button class="btn btn-ghost btn-sm btn-sweep" onclick="loadCryptoFutures()">
+                <button aria-label="Refresh Futures" class="btn btn-ghost btn-sm btn-sweep" onclick="loadCryptoFutures()">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 </button>
             </div>

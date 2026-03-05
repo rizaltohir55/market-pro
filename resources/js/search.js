@@ -84,7 +84,7 @@ export const GlobalSearch = {
                 if (firstMatch) {
                     firstMatch.click();
                 } else if (e.target.value.trim()) {
-                    window.location.href = `/asset?symbol=${encodeURIComponent(e.target.value.trim().toUpperCase())}`;
+                    window.location.href = `/trading?symbol=${encodeURIComponent(e.target.value.trim().toUpperCase())}`;
                 }
             }
         });
@@ -182,7 +182,7 @@ export const GlobalSearch = {
         } else {
             // Use data-nav-href instead of inline onclick — navigation handled by event delegation
             container.innerHTML = results.map(r => `
-                <div class="search-result-item" data-nav-href="/asset?symbol=${encodeURIComponent(r.symbol)}">
+                <div class="search-result-item" data-nav-href="/trading?symbol=${encodeURIComponent(r.symbol)}">
                     <span style="font-weight: 600; color: var(--text-primary);">${escapeHtml(r.label)}</span>
                     <span class="badge" style="font-size: 0.6rem; opacity: 0.7">${escapeHtml(r.type)}</span>
                 </div>
@@ -205,7 +205,7 @@ export const GlobalSearch = {
                 data.forEach(q => {
                     const cls = q.change_pct >= 0 ? 'positive' : 'negative';
                     // data-nav-href used for safe navigation
-                    html += `<tr class="term-tr" data-nav-href="/asset?symbol=stock:${encodeURIComponent(q.symbol)}">
+                    html += `<tr class="term-tr" data-nav-href="/trading?symbol=stock:${encodeURIComponent(q.symbol)}">
                         <td style="font-weight:bold; color:var(--text-primary)">${escapeHtml(q.symbol)}</td>
                         <td style="color:var(--text-muted); max-width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(q.name)}</td>
                         <td>$${escapeHtml(q.price.toFixed(2))}</td>
@@ -225,7 +225,7 @@ export const GlobalSearch = {
                         <div style="font-size:1.1rem; font-weight:700; color:var(--text-primary)">${escapeHtml(prof.name || 'Unknown')} (${escapeHtml(prof.symbol || '')})</div>
                         <div style="font-size:0.75rem; color:var(--text-muted)">${escapeHtml(prof.industry || '-')} | ${escapeHtml(prof.sector || '-')}</div>
                     </div>
-                    <button class="btn btn-sm btn-primary" data-nav-href="/asset?symbol=stock:${encodeURIComponent(prof.symbol || '')}">View Chart</button>
+                    <button class="btn btn-sm btn-primary" data-nav-href="/trading?symbol=stock:${encodeURIComponent(prof.symbol || '')}">View Chart</button>
                 </div>
                 <div style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); margin-bottom:4px">Latest Intelligence:</div>
                 <ul style="list-style:none; padding:0; margin:0;">`;

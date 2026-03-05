@@ -1,41 +1,88 @@
-/* ================================
-   MarketPro — Cyber Professional Theme
-   Design System v2.0
-   ================================ */
+@import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600;700&display=swap');
-
-/* ─── CSS VARIABLES / DESIGN TOKENS ─── */
-:root {
+@theme {
   /* Background - Deep Navy Cyber */
+  --color-bg-base: #060b18;
+  --color-bg-surface: rgba(8, 20, 40, 0.72);
+  --color-bg-elevated: rgba(12, 30, 55, 0.75);
+  --color-bg-hover: rgba(0, 240, 255, 0.06);
+  --color-bg-active: rgba(0, 240, 255, 0.12);
+
+  /* Border */
+  --color-border: rgba(0, 240, 255, 0.07);
+  --color-border-hover: rgba(0, 240, 255, 0.18);
+  --color-border-accent: rgba(0, 240, 255, 0.25);
+
+  /* Text */
+  --color-text-primary: #e8f4f8;
+  --color-text-secondary: #8ba4b8;
+  --color-text-muted: #84a0b5;
+  --color-text-inverse: #060b18;
+
+  /* Accent (Electric Cyan) */
+  --color-accent: #00f0ff;
+  --color-accent-hover: #00c8d6;
+  --color-accent-subtle: rgba(0, 240, 255, 0.08);
+  --color-accent-glow: rgba(0, 240, 255, 0.35);
+
+  /* Secondary Accent (Electric Purple) */
+  --color-accent2: #a855f7;
+  --color-accent2-subtle: rgba(168, 85, 247, 0.1);
+
+  /* Status */
+  --color-success: #00ff88;
+  --color-success-bg: rgba(0, 255, 136, 0.1);
+  --color-danger: #ff3366;
+  --color-danger-bg: rgba(255, 51, 102, 0.1);
+  --color-warning: #ffaa00;
+  --color-warning-bg: rgba(255, 170, 0, 0.12);
+  --color-info: #00aaff;
+  --color-info-bg: rgba(0, 170, 255, 0.1);
+
+  /* Fonts */
+  --font-display: "Rajdhani", "Inter", sans-serif;
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Share Tech Mono", "JetBrains Mono", monospace;
+
+  /* Shadows */
+  --shadow-island: 0 8px 32px -8px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 240, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shadow-glow: 0 0 20px rgba(0, 240, 255, 0.15),
+    0 0 60px rgba(0, 240, 255, 0.05);
+  --shadow-glass: 0 0 20px rgba(0, 240, 255, 0.08), inset 0 0 20px rgba(0, 240, 255, 0.03);
+  --shadow-accent-glow: 0 0 10px #00f0ff, 0 0 20px rgba(0, 240, 255, 0.3);
+  --shadow-accent-sm: 0 0 10px rgba(0, 240, 255, 0.12);
+  --shadow-accent-md: 0 0 12px rgba(0, 240, 255, 0.12);
+  --shadow-accent-lg: 0 0 12px rgba(0, 240, 255, 0.15);
+}
+
+/* ─── CSS VARIABLES / DESIGN TOKENS (Legacy Support) ─── */
+:root {
+  /* Keep these for now to avoid breaking existing manual CSS that uses var() */
   --bg-base: #060b18;
   --bg-surface: rgba(8, 20, 40, 0.72);
   --bg-elevated: rgba(12, 30, 55, 0.75);
   --bg-hover: rgba(0, 240, 255, 0.06);
   --bg-active: rgba(0, 240, 255, 0.12);
 
-  /* Border */
   --border: rgba(0, 240, 255, 0.07);
   --border-hover: rgba(0, 240, 255, 0.18);
   --border-accent: rgba(0, 240, 255, 0.25);
 
-  /* Text */
   --text-primary: #e8f4f8;
   --text-secondary: #8ba4b8;
-  --text-muted: #4d6a7f;
+  --text-muted: #84a0b5;
   --text-inverse: #060b18;
 
-  /* Accent (Electric Cyan) */
   --accent: #00f0ff;
   --accent-hover: #00c8d6;
   --accent-subtle: rgba(0, 240, 255, 0.08);
   --accent-glow: rgba(0, 240, 255, 0.35);
 
-  /* Secondary Accent (Electric Purple) */
   --accent2: #a855f7;
   --accent2-subtle: rgba(168, 85, 247, 0.1);
 
-  /* Status */
   --success: #00ff88;
   --success-bg: rgba(0, 255, 136, 0.1);
   --danger: #ff3366;
@@ -45,7 +92,6 @@
   --info: #00aaff;
   --info-bg: rgba(0, 170, 255, 0.1);
 
-  /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -54,30 +100,25 @@
   --space-6: 32px;
   --space-8: 48px;
 
-  /* Radius — Sharper Cyber Aesthetic */
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
 
-  /* Fonts */
   --font-display: 'Rajdhani', 'Inter', sans-serif;
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'Share Tech Mono', 'JetBrains Mono', monospace;
 
-  /* Sidebar & Layout */
   --sidebar-width: 260px;
   --topbar-height: 72px;
   --sidebar-margin: 12px;
 
-  /* Shadows */
   --shadow-island: 0 8px 32px -8px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(0, 240, 255, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
   --shadow-glow: 0 0 20px rgba(0, 240, 255, 0.15),
     0 0 60px rgba(0, 240, 255, 0.05);
 
-  /* Transitions */
   --transition-fast: 180ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -166,49 +207,35 @@ a:hover {
 
 /* ─── TYPOGRAPHY ─── */
 .text-display {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  @apply font-display text-[2rem] font-bold tracking-[0.04em] uppercase;
 }
 
 .text-h1 {
-  font-family: var(--font-display);
-  font-size: 1.75rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  @apply font-display text-[1.75rem] font-bold tracking-[0.03em];
 }
 
 .text-h2 {
-  font-family: var(--font-display);
-  font-size: 1.375rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  @apply font-display text-[1.375rem] font-semibold tracking-[0.02em];
 }
 
 .text-h3 {
-  font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 600;
+  @apply font-display text-[1.125rem] font-semibold;
 }
 
 .text-body {
-  font-size: 0.875rem;
+  @apply text-[0.875rem];
 }
 
 .text-caption {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
+  @apply text-[0.8125rem] text-text-secondary;
 }
 
 .text-small {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  @apply text-[0.75rem] text-text-muted;
 }
 
 .text-mono {
-  font-family: var(--font-mono);
+  @apply font-mono;
 }
 
 .text-success {
@@ -237,67 +264,40 @@ a:hover {
 
 /* ─── LAYOUT SHELL ─── */
 .app-layout {
-  display: grid;
-  height: 100vh;
-  width: 100vw;
-  padding: var(--sidebar-margin);
-  gap: var(--sidebar-margin);
+  @apply grid h-screen w-screen p-[var(--sidebar-margin)] gap-[var(--sidebar-margin)] relative z-1;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
     "sidebar ticker"
     "sidebar topbar"
     "sidebar content";
-  position: relative;
-  z-index: 1;
 }
 
 .app-layout>* {
-  min-width: 0;
+  @apply min-w-0;
 }
 
 /* ─── TICKER BAR ─── */
 .ticker-bar {
-  grid-area: ticker;
-  background: var(--bg-surface);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-island);
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  position: relative;
-  z-index: 100;
-  height: 42px;
-  margin-bottom: 2px;
+  @apply [grid-area:ticker] bg-bg-surface backdrop-blur-[20px] saturate-[140%] border border-border rounded-lg shadow-island flex items-center overflow-hidden relative z-100 h-[42px] mb-[2px];
 }
 
 /* Scan-line decoration on ticker */
 .ticker-bar::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+  @apply content-[''] absolute inset-0 pointer-events-none z-1;
   background: repeating-linear-gradient(0deg,
       transparent,
       transparent 2px,
       rgba(0, 240, 255, 0.015) 2px,
       rgba(0, 240, 255, 0.015) 4px);
-  z-index: 1;
 }
 
 .ticker-track {
-  display: flex;
-  gap: var(--space-5);
-  animation: ticker-scroll 60s linear infinite;
-  white-space: nowrap;
-  padding: 0 var(--space-4);
+  @apply flex gap-5 animate-[ticker-scroll_60s_linear_infinite] whitespace-nowrap px-4;
 }
 
 .ticker-track:hover {
-  animation-play-state: paused;
+  @apply [animation-play-state:paused];
 }
 
 @keyframes ticker-scroll {
@@ -355,54 +355,22 @@ a:hover {
 
 /* ─── SIDEBAR ─── */
 .sidebar {
-  grid-area: sidebar;
-  background: var(--bg-surface);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-island);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  z-index: 200;
-  height: 100%;
-  transition: transform var(--transition-base);
-  position: relative;
+  @apply [grid-area:sidebar] bg-bg-surface backdrop-blur-[24px] saturate-[140%] border border-border rounded-xl shadow-island flex flex-col overflow-hidden z-200 h-full transition-transform duration-300 relative;
 }
 
 /* Sidebar top glow line */
 .sidebar::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 16px;
-  right: 16px;
-  height: 1px;
+  @apply content-[''] absolute top-0 left-4 right-4 h-[1px] opacity-40 z-10;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  opacity: 0.4;
-  z-index: 10;
 }
 
 .sidebar-header {
-  padding: var(--space-5) var(--space-4);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-1);
+  @apply p-5 px-4 flex items-center gap-3 mb-1;
 }
 
 .sidebar-logo {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  @apply font-display text-[1.2rem] font-bold text-accent tracking-[0.08em] uppercase flex items-center gap-2;
   text-shadow: 0 0 15px var(--accent-glow);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .sidebar-logo svg {
@@ -410,331 +378,166 @@ a:hover {
 }
 
 .sidebar-nav {
-  flex: 1;
-  padding: var(--space-2);
-  overflow-y: auto;
+  @apply flex-1 p-2 overflow-y-auto;
 }
 
 .nav-section {
-  margin-bottom: var(--space-3);
+  @apply mb-3;
 }
 
 .nav-section-title {
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  padding: var(--space-1) var(--space-3);
-  margin-bottom: var(--space-1);
+  @apply font-display text-[0.7rem] font-semibold text-text-muted uppercase tracking-[0.12em] py-1 px-3 mb-1;
 }
 
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 9px var(--space-3);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  transition: all var(--transition-fast);
-  cursor: pointer;
-  text-decoration: none;
-  position: relative;
-  border: 1px solid transparent;
+  @apply flex items-center gap-3 py-[9px] px-3 rounded-md text-text-secondary text-[0.8125rem] font-medium transition-all duration-180 cursor-pointer no-underline relative border border-transparent;
 }
 
 .nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: rgba(0, 240, 255, 0.06);
+  @apply bg-bg-hover text-text-primary border-border/5;
 }
 
 .nav-item.active {
-  background: var(--accent-subtle);
-  color: var(--accent);
-  border-color: rgba(0, 240, 255, 0.15);
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.08),
-    inset 0 0 20px rgba(0, 240, 255, 0.03);
+  @apply bg-accent-subtle text-accent border-accent/15 shadow-glass;
 }
 
 /* Active left bar indicator */
 .nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: -1px;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 60%;
-  width: 2px;
-  background: var(--accent);
-  border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 10px var(--accent), 0 0 20px rgba(0, 240, 255, 0.3);
+  @apply content-[''] absolute left-[-1px] top-1/2 -translate-y-1/2 h-[60%] w-[2px] bg-accent rounded-r shadow-accent-glow;
 }
 
 .nav-item .nav-icon {
-  width: 18px;
-  height: 18px;
-  opacity: 0.6;
-  transition: all var(--transition-fast);
+  @apply w-[18px] h-[18px] opacity-60 transition-all duration-180;
 }
 
 .nav-item:hover .nav-icon {
-  opacity: 0.9;
+  @apply opacity-90;
 }
 
 .nav-item.active .nav-icon {
-  opacity: 1;
-  filter: drop-shadow(0 0 4px var(--accent));
+  @apply opacity-100;
+  filter: drop-shadow(0_0_4px_var(--accent));
 }
 
 /* Watchlist in sidebar */
 .watchlist {
-  border-top: 1px solid var(--border);
-  padding: var(--space-3) var(--space-2);
-  overflow-y: auto;
-  flex-shrink: 0;
-  max-height: 300px;
+  @apply border-t border-border py-3 px-2 overflow-y-auto shrink-0 max-h-[300px];
 }
 
 .watchlist-title {
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  padding: var(--space-1) var(--space-3);
-  margin-bottom: var(--space-2);
+  @apply font-display text-[0.7rem] font-semibold text-text-muted uppercase tracking-[0.1em] py-1 px-3 mb-2;
 }
 
 .watchlist-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px var(--space-3);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  transition: all var(--transition-fast);
-  border: 1px solid transparent;
+  @apply flex justify-between items-center py-[6px] px-3 rounded-sm cursor-pointer font-mono text-[0.72rem] transition-all duration-180 border border-transparent;
 }
 
 .watchlist-item:hover {
-  background: var(--bg-hover);
-  border-color: rgba(0, 240, 255, 0.06);
+  @apply bg-bg-hover border-border/5;
 }
 
 .watchlist-item .wl-symbol {
-  color: var(--text-primary);
-  font-weight: 600;
+  @apply text-text-primary font-semibold;
 }
 
 .watchlist-item .wl-price {
-  color: var(--text-secondary);
+  @apply text-text-secondary;
 }
 
 .watchlist-item .wl-change.positive {
-  color: var(--success);
+  @apply text-success;
 }
 
 .watchlist-item .wl-change.negative {
-  color: var(--danger);
+  @apply text-danger;
 }
 
 .watchlist-item .wl-name {
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 50px;
-  flex-shrink: 0;
+  @apply text-text-muted text-[0.65rem] overflow-hidden truncate max-w-[50px] shrink-0;
 }
 
 /* ─── PAIR CATEGORY TABS (Sidebar) ─── */
 .pair-tabs-bar {
-  display: flex;
-  gap: 5px;
-  padding: var(--space-2) var(--space-2) var(--space-1);
-  margin-bottom: var(--space-2);
-  /* Horizontal scroll so full labels are always reachable */
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  /* Firefox */
-  -ms-overflow-style: none;
-  /* IE/Edge */
+  @apply flex gap-[5px] pt-2 px-2 pb-1 mb-2 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none];
 }
 
 .pair-tabs-bar::-webkit-scrollbar {
-  display: none;
+  @apply hidden;
 }
 
 .pair-tab {
-  flex-shrink: 0;
-  /* Never shrink — horizontal scroll handles overflow */
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-family: var(--font-ui);
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 5px 10px;
-  cursor: pointer;
-  text-align: center;
-  white-space: nowrap;
-  letter-spacing: 0.03em;
-  transition: all var(--transition-fast);
-  line-height: 1.4;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  @apply shrink-0 bg-bg-elevated border border-border rounded-sm text-text-secondary font-ui text-[0.7rem] font-semibold py-[5px] px-[10px] cursor-pointer text-center whitespace-nowrap tracking-[0.03em] transition-all duration-180 leading-[1.4] inline-flex items-center gap-1;
 }
 
 .pair-tab:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
-  color: var(--text-primary);
+  @apply bg-bg-hover border-border-hover text-text-primary;
 }
 
 .pair-tab.active {
-  background: var(--accent-subtle);
-  border-color: rgba(0, 240, 255, 0.28);
-  color: var(--accent);
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.12);
+  @apply bg-accent-subtle border-accent/28 text-accent shadow-accent-sm;
   text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
 }
 
 .topbar {
-  grid-area: topbar;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-1) 0;
-  z-index: 150;
+  @apply [grid-area:topbar] bg-transparent flex items-center justify-between py-1 z-150;
 }
 
 .topbar-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
+  @apply flex items-center gap-4;
 }
 
 .topbar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
+  @apply flex items-center gap-4;
 }
 
 .topbar-pill {
-  background: var(--bg-surface);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-island);
-  padding: 6px var(--space-3);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  transition: border-color var(--transition-fast);
+  @apply bg-bg-surface backdrop-blur-[20px] saturate-[140%] border border-border rounded-lg shadow-island px-3 py-[6px] flex items-center gap-3 transition-colors duration-180;
 }
 
 .topbar-pill:hover {
-  border-color: var(--border-hover);
+  @apply border-border-hover;
 }
 
 .topbar-title {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  @apply font-display text-[1.2rem] font-bold text-text-primary tracking-[0.03em] uppercase;
 }
 
 .search-box {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-1) var(--space-3);
-  min-width: 220px;
-  transition: all var(--transition-fast);
+  @apply flex items-center gap-2 bg-bg-elevated border border-border rounded-md px-3 py-1 min-w-[220px] transition-all duration-180;
 }
 
 .search-box:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.12);
+  @apply border-accent shadow-accent-md;
 }
 
 .search-box input {
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text-primary);
-  font-size: 0.8rem;
-  font-family: var(--font-mono);
-  width: 100%;
+  @apply bg-transparent border-none outline-none text-text-primary text-[0.8rem] font-mono w-full;
 }
 
 .search-box input::placeholder {
-  /* Bug 6 fix: use text-secondary instead of text-muted for readability */
-  color: var(--text-secondary);
-  opacity: 0.75;
+  @apply text-text-secondary opacity-75;
 }
 
-
 .pair-selector {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-1) var(--space-3);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  outline: none;
-  transition: all var(--transition-fast);
+  @apply bg-bg-elevated border border-border rounded-md px-3 py-1 text-text-primary font-mono text-[0.8rem] font-semibold cursor-pointer outline-none transition-all duration-180;
 }
 
 .pair-selector:focus,
 .pair-selector:hover {
-  border-color: var(--accent);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+  @apply border-accent shadow-accent-lg;
 }
 
 /* Connection status */
 .conn-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: 0.72rem;
-  color: var(--text-muted);
+  @apply flex items-center gap-2 text-[0.72rem] text-text-muted;
 }
 
 .conn-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 6px var(--success);
-  animation: pulse-dot 2s ease-in-out infinite;
+  @apply w-[6px] h-[6px] rounded-full bg-success shadow-[0_0_6px_var(--success)] animate-[pulse-dot_2s_ease-in-out_infinite];
 }
 
 .conn-dot.disconnected {
-  background: var(--danger);
-  box-shadow: 0 0 6px var(--danger);
-  animation: none;
+  @apply bg-danger shadow-[0_0_6px_var(--danger)] animate-none;
 }
 
 @keyframes pulse-dot {
@@ -753,51 +556,19 @@ a:hover {
 
 /* ─── FLOATING STATUS DOCK (Bottom of Sidebar) ─── */
 .floating-status-dock {
-  /* Positioned at the bottom of the sidebar grid area */
-  grid-area: sidebar;
-  align-self: end;
-  margin: 0 var(--sidebar-margin);
-  background: var(--bg-surface);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-island);
-  padding: var(--space-3) var(--space-4);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  /* Float above sidebar content without overlapping */
-  position: fixed;
-  bottom: var(--sidebar-margin);
-  left: var(--sidebar-margin);
-  width: calc(var(--sidebar-width) - var(--sidebar-margin) * 2);
-  z-index: 300;
+  @apply [grid-area:sidebar] self-end mx-[var(--sidebar-margin)] bg-bg-surface backdrop-blur-[16px] saturate-[140%] border border-border rounded-lg shadow-island p-3 px-4 flex items-center gap-3 font-mono text-[0.72rem] text-text-muted fixed bottom-[var(--sidebar-margin)] left-[var(--sidebar-margin)] w-[calc(var(--sidebar-width)-var(--sidebar-margin)*2)] z-300;
 }
 
 .floating-status-dock .status-divider {
-  width: 1px;
-  height: 18px;
-  background: var(--border);
-  flex-shrink: 0;
+  @apply w-[1px] h-[18px] bg-border shrink-0;
 }
 
 .floating-status-dock .status-clock-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-left: auto;
-  text-align: right;
+  @apply flex flex-col gap-[1px] ml-auto text-right;
 }
 
 .status-clock {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.04em;
+  @apply text-[0.75rem] font-semibold text-text-secondary tracking-[0.04em];
 }
 
 .status-last-update {
