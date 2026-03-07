@@ -11,6 +11,7 @@ use App\Services\CommodityMarketService;
 use App\Services\CryptoMarketService;
 use App\Services\NewsMarketService;
 use App\Services\PredictionService;
+use App\Services\EconomicCalendarService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -66,6 +67,31 @@ class MarketController extends Controller
         $klines   = $market->getKlines($symbol, $interval, 200);
         $signal   = $prediction->getScalpingSignal($klines);
         return response()->json($signal);
+    }
+
+    public function batchPredictions(Request $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
+    {
+        $symbols  = $request->get('symbols', []);
+        $interval = $request->get('interval', '15m');
+        
+        if (is_string($symbols)) {
+            $symbols = explode(',', $symbols);
+        }
+
+        $symbols = array_slice(array_filter(array_map('trim', $symbols)), 0, 50);
+        $results = [];
+
+        foreach ($symbols as $symbol) {
+            $symbol = strtoupper($symbol);
+            $cacheKey = "prediction_{$symbol}_{$interval}";
+            
+            $results[$symbol] = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function() use ($market, $prediction, $symbol, $interval) {
+                $klines = $market->getKlines($symbol, $interval, 200);
+                return $prediction->getScalpingSignal($klines);
+            });
+        }
+
+        return response()->json($results);
     }
 
     /**
@@ -341,6 +367,17 @@ class MarketController extends Controller
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $days   = min((int) $request->get('days', 7), 30);
         $data   = $newsMarket->getCompanyNews($symbol, $days);
+        return response()->json($data);
+    }
+
+    /**
+     * Get global economic calendar.
+     */
+    public function economicCalendar(Request $request, EconomicCalendarService $calendar): JsonResponse
+    {
+        $from = $request->get('from');
+        $to   = $request->get('to');
+        $data = $calendar->getEconomicCalendar($from, $to);
         return response()->json($data);
     }
 

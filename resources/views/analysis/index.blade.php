@@ -1,7 +1,15 @@
 @extends('layouts.app')
 
 @section('title', 'Analysis — ' . $symbol)
-@section('page-title', str_replace('USDT', '/USDT', $symbol) . ' Technical Analysis')
+@section('page-title')
+    <div style="display:flex;align-items:center;gap:var(--space-3)">
+        {{ str_replace('USDT', '/USDT', $symbol) }} Technical Analysis
+        <div class="header-price-badge">
+            <span class="text-caption" style="font-size:0.6rem;opacity:0.6">LIVE</span>
+            <span id="header-price-val" class="text-mono">${{ number_format($signal15m['price'] ?? $ticker['lastPrice'] ?? 0, 2) }}</span>
+        </div>
+    </div>
+@endsection
 
 @section('content')
 {{-- Multi-Timeframe Signals --}}
@@ -47,16 +55,16 @@
         <div class="panel-body no-padding">
             <div class="indicator-list" id="indicator-list-15m">
                 @foreach($signal15m['indicators'] as $ind)
-                <div class="indicator-row" style="padding:var(--space-2) 0;border-bottom:1px solid var(--border-color)">
-                    <span class="indicator-name" style="flex:1">{{ $ind['name'] }}</span>
+                <div class="indicator-row">
+                    <span class="indicator-name">{{ $ind['name'] }}</span>
                     @php
                         $sc = in_array($ind['signal'], ['BUY','BULLISH']) ? 'text-success' :
                                (in_array($ind['signal'], ['SELL','BEARISH']) ? 'text-danger' : 'text-muted');
                         $bc = in_array($ind['signal'], ['BUY','BULLISH']) ? 'buy' :
                                (in_array($ind['signal'], ['SELL','BEARISH']) ? 'sell' : 'neutral');
                     @endphp
-                    <span class="indicator-value {{$sc}}" style="font-size:0.75rem;margin-right:var(--space-2)">{{ $ind['value'] }}</span>
-                    <span class="badge badge-{{$bc}}" style="font-size:0.65rem">{{ $ind['signal'] }}</span>
+                    <span class="indicator-value {{$sc}}">{{ $ind['value'] }}</span>
+                    <span class="badge badge-{{$bc}}">{{ $ind['signal'] }}</span>
                 </div>
                 @endforeach
             </div>
@@ -86,10 +94,6 @@
                 </div>
                 @endif
 
-                <div style="padding:var(--space-2) var(--space-3);background:var(--bg-elevated);border-radius:var(--radius-sm);text-align:center">
-                    <span class="text-caption">Current Price</span>
-                    <div class="text-mono" style="font-size:1.25rem;font-weight:700">${{ number_format($signal15m['price'] ?? $ticker['lastPrice'] ?? 0, 2) }}</div>
-                </div>
 
                 @if(!empty($sr['support']))
                 <div>
@@ -173,7 +177,7 @@ function initSSE() {
     sseSource.onopen = () => {
         document.getElementById('conn-dot')?.classList.remove('disconnected');
         if (document.getElementById('conn-text')) document.getElementById('conn-text').textContent = 'Connected (SSE)';
-        if (document.getElementById('ws-status-text')) document.getElementById('ws-status-text').textContent = 'Real-time Server Stream Active';
+        if (document.getElementById('ws-status-text')) document.getElementById('ws-status-text').textContent = 'Connected';
     };
     
     sseSource.onmessage = (event) => {
@@ -276,6 +280,10 @@ function updatePredictionDOM(tf, data) {
         
         const slEl = card.querySelector('.sl-val');
         if (slEl) slEl.textContent = '$' + formatPrice(sl);
+
+        // Update Header Price if available in prediction payload
+        const headerPrice = document.getElementById('header-price-val');
+        if (headerPrice && data.price) headerPrice.textContent = '$' + formatPrice(data.price);
     }
     
     // Update Summary
@@ -289,10 +297,10 @@ function updatePredictionDOM(tf, data) {
             listEl.innerHTML = data.indicators.map(ind => {
                 const sc = ['BUY','BULLISH'].includes(ind.signal)?'text-success':['SELL','BEARISH'].includes(ind.signal)?'text-danger':'text-muted';
                 const bc = ['BUY','BULLISH'].includes(ind.signal)?'buy':['SELL','BEARISH'].includes(ind.signal)?'sell':'neutral';
-                return `<div class="indicator-row" style="padding:var(--space-2) 0;border-bottom:1px solid var(--border-color)">
-                            <span class="indicator-name" style="flex:1">${ind.name}</span>
-                            <span class="indicator-value ${sc}" style="font-size:0.75rem;margin-right:var(--space-2)">${ind.value}</span>
-                            <span class="badge badge-${bc}" style="font-size:0.65rem">${ind.signal}</span>
+                return `<div class="indicator-row">
+                            <span class="indicator-name">${ind.name}</span>
+                            <span class="indicator-value ${sc}">${ind.value}</span>
+                            <span class="badge badge-${bc}">${ind.signal}</span>
                         </div>`;
             }).join('');
         }
@@ -356,6 +364,12 @@ function initBinanceWS() {
                 try {
                     candleSeries.update(tickBar);
                 } catch(e) {}
+            }
+
+            // Update Header Price from WS Tick
+            const headerPrice = document.getElementById('header-price-val');
+            if (headerPrice) {
+                headerPrice.textContent = '$' + formatPrice(tickBar.close);
             }
         } catch(e) {}
     };

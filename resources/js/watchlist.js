@@ -39,10 +39,17 @@ export const Watchlist = {
             });
         });
 
-        // Load crypto by default
+        // Load crypto by default (this handles the UI initially)
         this.fetchPairCategory('crypto');
 
-        // Auto-refresh every 2 minutes
+        // Silently preload other categories for global search autocomplete
+        setTimeout(() => {
+            this.fetchPairCategory('stocks');
+            this.fetchPairCategory('forex');
+            this.fetchPairCategory('commodities');
+        }, 1000); // 1s delay to not block the main render
+
+        // Auto-refresh active category every 2 minutes
         this.pairRefreshTimer = setInterval(() => {
             this.fetchPairCategory(this.activeCategory);
         }, 120000);
@@ -57,7 +64,7 @@ export const Watchlist = {
         };
 
         try {
-            const r = await fetch(urlMap[cat], { signal: AbortSignal.timeout(15000) });
+            const r = await fetch(urlMap[cat], { signal: AbortSignal.timeout(30000) });
             if (!r.ok) return;
             const data = await r.json();
 

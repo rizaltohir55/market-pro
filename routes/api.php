@@ -13,6 +13,7 @@ Route::prefix('market')->group(function () {
     Route::get('/trades',         [MarketController::class, 'trades']);
     Route::get('/top-pairs',      [MarketController::class, 'topPairs']);
     Route::get('/prediction',     [MarketController::class, 'prediction']);
+    Route::get('/batch-predictions', [MarketController::class, 'batchPredictions']);
     Route::get('/stream',         [\App\Http\Controllers\Api\StreamController::class, 'stream']);
 
     // ─── Stocks / Global Markets ─────────────────────────────────────────────
@@ -46,6 +47,7 @@ Route::prefix('market')->group(function () {
     Route::get('/company-news',  [MarketController::class, 'companyNews']);
     Route::get('/news/bookmarks', [MarketController::class, 'getBookmarks']);
     Route::post('/news/bookmarks', [MarketController::class, 'toggleBookmark']);
+    Route::get('/economic-calendar', [MarketController::class, 'economicCalendar']);
     
     // ─── Dashboard AJAX Data ──────────────────────────────────────────────
     Route::get('/dashboard/market-summary', [\App\Http\Controllers\DashboardController::class, 'getMarketSummary']);

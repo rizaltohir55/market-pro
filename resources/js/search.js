@@ -166,6 +166,19 @@ export const GlobalSearch = {
             results = results.concat(stockMatches.slice(0, 3));
         }
 
+        // Search Forex
+        if (pairData.forex && pairData.forex.rates) {
+            const rates = Object.keys(pairData.forex.rates);
+            const forexMatches = rates.filter(cur =>
+                cur.toLowerCase().includes(query) ||
+                `usd${cur.toLowerCase()}`.includes(query) ||
+                `${cur.toLowerCase()}usd`.includes(query)
+            ).map(cur => ({
+                label: `${cur}/USD (or ${cur} pair)`, type: 'Forex', symbol: `forex:${cur}`
+            }));
+            results = results.concat(forexMatches.slice(0, 2));
+        }
+
         // Search Commodities
         if (pairData.commodities && Array.isArray(pairData.commodities)) {
             const commodityMatches = pairData.commodities.filter(p =>

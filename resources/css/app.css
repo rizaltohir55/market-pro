@@ -137,6 +137,7 @@ html {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  height: 100%;
 }
 
 body {
@@ -264,7 +265,13 @@ a:hover {
 
 /* ─── LAYOUT SHELL ─── */
 .app-layout {
-  @apply grid h-screen w-screen p-[var(--sidebar-margin)] gap-[var(--sidebar-margin)] relative z-1;
+  @apply grid w-screen;
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  padding: var(--sidebar-margin);
+  column-gap: var(--sidebar-margin);
+  row-gap: var(--sidebar-margin);
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
@@ -478,54 +485,105 @@ a:hover {
   text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
 }
 
+/* ─── COLLAPSIBLE WATCHLIST ─── */
+.watchlist-details {
+  @apply border-t border-border py-0 px-2 overflow-hidden shrink-0;
+  max-height: 320px;
+}
+
+.watchlist-details[open] {
+  overflow-y: auto;
+}
+
+.watchlist-summary {
+  @apply flex items-center justify-between cursor-pointer select-none list-none py-2 px-3;
+  /* Remove native <details> triangle */
+}
+
+.watchlist-summary::-webkit-details-marker,
+.watchlist-summary::marker {
+  display: none;
+  content: '';
+}
+
+.watchlist-summary:hover {
+  @apply text-text-primary;
+}
+
+.wl-summary-text {
+  @apply flex items-center gap-2 font-display text-[0.7rem] font-semibold text-text-muted uppercase tracking-[0.1em];
+  transition: color var(--transition-fast);
+}
+
+.watchlist-summary:hover .wl-summary-text {
+  color: var(--text-primary);
+}
+
+/* Rotate chevron when open */
+.watchlist-details .wl-chevron {
+  transition: transform var(--transition-fast);
+  transform: rotate(-90deg);
+  /* collapsed = pointing right */
+}
+
+.watchlist-details[open] .wl-chevron {
+  transform: rotate(0deg);
+  /* open = pointing down */
+}
+
 .topbar {
   @apply [grid-area:topbar] bg-transparent flex items-center justify-between py-1 z-150;
 }
 
 .topbar-left {
-  @apply flex items-center gap-4;
+  @apply flex items-center gap-6;
 }
 
 .topbar-right {
   @apply flex items-center gap-4;
 }
 
-.topbar-pill {
-  @apply bg-bg-surface backdrop-blur-[20px] saturate-[140%] border border-border rounded-lg shadow-island px-3 py-[6px] flex items-center gap-3 transition-colors duration-180;
+#topbar-search-container {
+  @apply bg-bg-surface/30 backdrop-blur-[16px] border border-white/5 p-0 flex items-center transition-all duration-300 relative overflow-hidden h-[34px] flex-nowrap;
+  display: flex !important;
+  align-items: center !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.2), inset 0 0 10px rgba(255, 255, 255, 0.02) !important;
+  min-width: 280px !important;
 }
 
-.topbar-pill:hover {
-  @apply border-border-hover;
-}
-
-.topbar-title {
-  @apply font-display text-[1.2rem] font-bold text-text-primary tracking-[0.03em] uppercase;
+#topbar-search-container:hover,
+#topbar-search-container:focus-within {
+  @apply bg-bg-surface/50 border-white/10;
+  background-color: rgba(var(--bg-surface-rgb), 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.3), inset 0 0 15px rgba(255, 255, 255, 0.03) !important;
 }
 
 .search-box {
-  @apply flex items-center gap-2 bg-bg-elevated border border-border rounded-md px-3 py-1 min-w-[220px] transition-all duration-180;
+  @apply flex items-center gap-3 px-5 py-0 w-full h-full transition-all duration-300 relative;
+  background: transparent !important;
 }
 
-.search-box:focus-within {
-  @apply border-accent shadow-accent-md;
+.search-icon {
+  @apply flex items-center justify-center w-6 h-6 text-text-muted transition-colors duration-300;
+}
+
+.search-box:focus-within .search-icon {
+  @apply text-accent;
+  filter: drop-shadow(0 0 4px var(--accent));
 }
 
 .search-box input {
-  @apply bg-transparent border-none outline-none text-text-primary text-[0.8rem] font-mono w-full;
+  @apply bg-transparent border-none outline-none text-text-primary text-[0.85rem] w-full h-full p-0 leading-none;
+  letter-spacing: 0.01em;
 }
 
 .search-box input::placeholder {
-  @apply text-text-secondary opacity-75;
+  @apply text-text-muted opacity-30 tracking-wider text-[0.85rem];
 }
 
-.pair-selector {
-  @apply bg-bg-elevated border border-border rounded-md px-3 py-1 text-text-primary font-mono text-[0.8rem] font-semibold cursor-pointer outline-none transition-all duration-180;
-}
-
-.pair-selector:focus,
-.pair-selector:hover {
-  @apply border-accent shadow-accent-lg;
-}
+/* Unused Search Elements Removed */
 
 /* Connection status */
 .conn-status {
@@ -600,7 +658,11 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: 0 0 calc(var(--space-8) + 40px) 0;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
 }
 
 .main-content::-webkit-scrollbar {
@@ -755,6 +817,7 @@ a:hover {
   overflow: hidden;
   transition: all var(--transition-base);
   position: relative;
+  margin-bottom: 0;
 }
 
 .panel:hover {
@@ -930,11 +993,11 @@ a:hover {
 
 .data-table th {
   text-align: left;
-  padding: var(--space-2) var(--space-3);
+  padding: 2px 8px;
   font-family: var(--font-display);
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   border-bottom: 1px solid var(--border);
@@ -955,10 +1018,10 @@ a:hover {
 }
 
 .data-table td {
-  padding: var(--space-2) var(--space-3);
+  padding: 2px 8px;
   border-bottom: 1px solid rgba(0, 240, 255, 0.03);
   color: var(--text-primary);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .data-table tr {
@@ -1389,22 +1452,41 @@ a:hover {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
   }
 
-  .topbar-pill {
-    padding: var(--space-2);
+  .header-price-badge {
+    display: inline-flex;
+    align-items: center;
     gap: var(--space-2);
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
+    background: var(--bg-elevated);
+    padding: 2px var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    animation: fade-in 0.5s ease-out;
+  }
+
+  .header-price-badge #header-price-val {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-shadow: 0 0 10px var(--accent-glow);
+  }
+
+  .topbar-command-bar {
+    padding: var(--space-1);
+    width: auto;
+    flex-direction: row;
+    height: 34px;
+    margin-left: auto;
+    min-width: 200px;
+    border-radius: 40px !important;
   }
 
   .search-box {
-    min-width: 100%;
-  }
-
-  .pair-selector {
-    min-width: 100%;
+    flex: 1;
   }
 
   .kpi-grid {
@@ -1526,22 +1608,43 @@ a:hover {
 }
 
 .indicator-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 80px;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   font-size: 0.8125rem;
   transition: all var(--transition-fast);
+  border-bottom: 1px solid var(--border);
+}
+
+.indicator-row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .indicator-row:hover {
-  background: var(--bg-hover);
+  background: rgba(0, 240, 255, 0.04);
+  box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.03);
 }
 
 .indicator-name {
   color: var(--text-secondary);
   font-weight: 500;
+  text-align: left;
+}
+
+.indicator-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-align: right;
+  letter-spacing: -0.01em;
+}
+
+.indicator-row .badge {
+  justify-self: end;
+  min-width: 64px;
+  justify-content: center;
 }
 
 .indicator-value {
@@ -2197,6 +2300,13 @@ select option {
 }
 
 /* ─── Search box & Autocomplete ───────────────────────────────────── */
+#search-input {
+  background: rgba(0, 240, 255, 0.04);
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  border-radius: 999px;
+  transition: all var(--transition-fast);
+}
+
 #search-input:focus {
   width: 100%;
   background: rgba(0, 10, 20, 0.5);
@@ -2223,26 +2333,56 @@ select option {
 
 .search-autocomplete {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 12px);
   left: 0;
   width: 100%;
-  min-width: 380px;
-  background: rgba(10, 15, 25, 0.95);
-  border: 1px solid rgba(0, 240, 255, 0.2);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 240, 255, 0.1);
-  z-index: 200;
+  min-width: 420px;
+  background: rgba(8, 20, 40, 0.94);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px -8px rgba(0, 0, 0, 0.7),
+    0 0 30px rgba(0, 240, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  z-index: 500;
   overflow: hidden;
+  animation: autocomplete-slide-in 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes autocomplete-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .search-result-item {
-  padding: 10px 15px;
+  padding: 12px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
-  transition: all 0.2s;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  position: relative;
+}
+
+.search-result-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
 .search-result-item:last-child {
@@ -2250,8 +2390,13 @@ select option {
 }
 
 .search-result-item:hover {
-  background: rgba(0, 240, 255, 0.1);
-  padding-left: 20px;
+  background: rgba(0, 240, 255, 0.08);
+  padding-left: 24px;
+}
+
+.search-result-item:hover::before {
+  opacity: 1;
+  box-shadow: 0 0 10px var(--accent);
 }
 
 /* ─── Terminal Search Results ─────────────────────────────────────── */

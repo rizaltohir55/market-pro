@@ -44,7 +44,6 @@
             &nbsp;L: ${{ number_format((float)$ticker['lowPrice'], 2) }}
             &nbsp;Vol: {{ number_format((float)$ticker['quoteVolume'] / 1e6, 1) }}M USDT
         </span>
-        <span id="stream-badge" class="badge badge-neutral" style="margin-left:auto">Connecting...</span>
     @endif
 </div>
 
@@ -177,9 +176,9 @@
                                         <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="10s" repeatCount="indefinite" />
                                     </circle>
                                 </svg>
-                                <div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                                    <div class="signal-action" id="signal-action-text" style="font-size:1.5rem;font-weight:700;letter-spacing:1px;text-shadow: 0 0 15px rgba(255,255,255,0.2)">—</div>
-                                    <div class="signal-confidence" id="signal-conf-text" style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-mono); margin-top:4px">CALC%</div>
+                                <div style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 0 14px; box-sizing:border-box;">
+                                    <div class="signal-action" id="signal-action-text" style="font-size:1.1rem;font-weight:700;letter-spacing:0.5px;text-align:center;line-height:1.25;text-shadow: 0 0 15px rgba(255,255,255,0.2)">—</div>
+                                    <div class="signal-confidence" id="signal-conf-text" style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); margin-top:5px">CALC%</div>
                                 </div>
                             </div>
                             <div class="signal-label" style="text-transform:uppercase;color:var(--text-secondary);font-size:0.7rem;letter-spacing:2px;text-align:center;">Composite Analysis</div>
@@ -201,6 +200,9 @@
                         <div class="skeleton skeleton-text" style="width:80%"></div>
                         <div class="skeleton skeleton-text" style="width:90%"></div>
                     </div>
+
+                    <div class="text-caption" style="margin-bottom:var(--space-2)">Raw Indicators</div>
+                    <div id="indicator-list" style="display:flex;flex-direction:column;"></div>
                 </div>
             </div>
         @else
@@ -647,7 +649,10 @@ function updatePriceDisplay(price) {
 // ─── PREDICTION ──────────────────────────────────────────────
 function renderPrediction(data) {
     if (!data || !data.categories) {
-        document.getElementById('pred-signal').innerHTML = '<div style="color:var(--text-muted);padding:var(--space-4);text-align:center">Waiting for sufficient data (min 200 candles)...</div>';
+        const predSignal = document.getElementById('pred-signal');
+        // Only update the label text, don't wipe the SVG ring
+        const sigLabel = predSignal ? predSignal.querySelector('.signal-label') : null;
+        if (sigLabel) sigLabel.textContent = 'Waiting for sufficient data...';
         return;
     }
 
@@ -680,67 +685,78 @@ function renderPrediction(data) {
     }
         
     // 2. Targets & Regime
-    document.getElementById('prediction-targets').style.display = 'block';
+    const predTargets = document.getElementById('prediction-targets');
+    if (predTargets) predTargets.style.display = 'block';
     
     // Choose TP/SL based on direction
     const tp = data.signal.includes('BUY') ? data.price_target_buy : data.price_target_sell;
     const sl = data.signal.includes('BUY') ? data.stop_loss_buy : data.stop_loss_sell;
     
-    document.getElementById('target-tp').textContent = '$' + formatPrice(tp);
-    document.getElementById('target-sl').textContent = '$' + formatPrice(sl);
-    document.getElementById('target-rr').textContent = data.risk_reward;
+    const tpEl = document.getElementById('target-tp');
+    const slEl = document.getElementById('target-sl');
+    const rrEl = document.getElementById('target-rr');
+    if (tpEl) tpEl.textContent = '$' + formatPrice(tp);
+    if (slEl) slEl.textContent = '$' + formatPrice(sl);
+    if (rrEl) rrEl.textContent = data.risk_reward;
     
     const tsEl = document.getElementById('trend-strength');
-    tsEl.textContent = data.trend_strength;
-    tsEl.className = data.trend_strength.includes('STRONG') ? 'text-success fw-bold' : 'text-muted';
+    if (tsEl) {
+        tsEl.textContent = data.trend_strength;
+        tsEl.className = data.trend_strength.includes('STRONG') ? 'text-success fw-bold' : 'text-muted';
+    }
     
     const mrBadge = document.getElementById('market-regime-badge');
-    mrBadge.style.display = 'inline-block';
-    mrBadge.textContent = data.market_regime;
-    mrBadge.className = `badge text-small ${data.market_regime === 'TRENDING' ? 'badge-buy' : 'badge-neutral'}`;
+    if (mrBadge) {
+        mrBadge.style.display = 'inline-block';
+        mrBadge.textContent = data.market_regime;
+        mrBadge.className = `badge text-small ${data.market_regime === 'TRENDING' ? 'badge-buy' : 'badge-neutral'}`;
+    }
 
     // 3. Category Breakdown (New Multi-layer view)
     const catEl = document.getElementById('category-list');
-    let catHtml = '';
-    for (const [catName, catData] of Object.entries(data.categories)) {
-        const cSig = catData.signal.includes('BUY') ? 'buy' : (catData.signal.includes('SELL') ? 'sell' : 'neutral');
-        const cColor = catData.signal.includes('BUY') ? 'var(--success)' : (catData.signal.includes('SELL') ? 'var(--danger)' : 'var(--text-muted)');
-        
-        // Progress bar logic
-        const buyw = catData.buy;
-        const sellw = catData.sell;
-        const neutw = 100 - buyw - sellw;
-        
-        catHtml += `
-        <div style="font-size:0.75rem;display:flex;flex-direction:column;gap:4px">
-            <div style="display:flex;justify-content:space-between">
-                <span style="font-weight:600;color:var(--text-primary)">${catName}</span>
-                <span class="badge badge-${cSig}" style="font-size:0.65rem;padding:0px 4px">${catData.signal}</span>
-            </div>
-            <div style="display:flex;height:6px;width:100%;border-radius:3px;overflow:hidden;background:var(--bg-base);box-shadow:inset 0 1px 3px rgba(0,0,0,0.2)">
-                <div style="width:${buyw}%;background:linear-gradient(90deg, #059669, #34d399);transition:width 0.5s ease"></div>
-                <div style="width:${neutw}%;background:var(--text-muted);opacity:0.2;transition:width 0.5s ease"></div>
-                <div style="width:${sellw}%;background:linear-gradient(90deg, #ef4444, #f87171);transition:width 0.5s ease"></div>
-            </div>
-        </div>`;
+    if (catEl) {
+        let catHtml = '';
+        for (const [catName, catData] of Object.entries(data.categories)) {
+            const cSig = catData.signal.includes('BUY') ? 'buy' : (catData.signal.includes('SELL') ? 'sell' : 'neutral');
+            
+            // Progress bar logic
+            const buyw = catData.buy;
+            const sellw = catData.sell;
+            const neutw = 100 - buyw - sellw;
+            
+            catHtml += `
+            <div style="font-size:0.75rem;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;justify-content:space-between">
+                    <span style="font-weight:600;color:var(--text-primary)">${catName}</span>
+                    <span class="badge badge-${cSig}" style="font-size:0.65rem;padding:0px 4px">${catData.signal}</span>
+                </div>
+                <div style="display:flex;height:6px;width:100%;border-radius:3px;overflow:hidden;background:var(--bg-base);box-shadow:inset 0 1px 3px rgba(0,0,0,0.2)">
+                    <div style="width:${buyw}%;background:linear-gradient(90deg, #059669, #34d399);transition:width 0.5s ease"></div>
+                    <div style="width:${neutw}%;background:var(--text-muted);opacity:0.2;transition:width 0.5s ease"></div>
+                    <div style="width:${sellw}%;background:linear-gradient(90deg, #ef4444, #f87171);transition:width 0.5s ease"></div>
+                </div>
+            </div>`;
+        }
+        catEl.innerHTML = catHtml;
     }
-    catEl.innerHTML = catHtml;
 
     // 4. Raw Indicator List
     const listEl = document.getElementById('indicator-list');
-    if (data.indicators && data.indicators.length) {
-        listEl.innerHTML = data.indicators.map(ind => {
-            const sc = ['BUY','BULLISH'].includes(ind.signal)?'text-success':['SELL','BEARISH'].includes(ind.signal)?'text-danger':'text-muted';
-            const bc = ['BUY','BULLISH'].includes(ind.signal)?'buy':['SELL','BEARISH'].includes(ind.signal)?'sell':'neutral';
-            return `
-            <div class="indicator-row" style="padding:var(--space-2) 0;border-bottom:1px solid var(--border-color)">
-                <span class="indicator-name" style="flex:1">${ind.name}</span>
-                <span class="indicator-value ${sc}" style="font-size:0.75rem;margin-right:var(--space-2)">${ind.value}</span>
-                <span class="badge badge-${bc}" style="font-size:0.65rem">${ind.signal}</span>
-            </div>`;
-        }).join('');
-    } else {
-        listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem">No raw indicators parsed.</div>';
+    if (listEl) {
+        if (data.indicators && data.indicators.length) {
+            listEl.innerHTML = data.indicators.map(ind => {
+                const sc = ['BUY','BULLISH'].includes(ind.signal)?'text-success':['SELL','BEARISH'].includes(ind.signal)?'text-danger':'text-muted';
+                const bc = ['BUY','BULLISH'].includes(ind.signal)?'buy':['SELL','BEARISH'].includes(ind.signal)?'sell':'neutral';
+                return `
+                <div class="indicator-row" style="padding:var(--space-2) 0;border-bottom:1px solid var(--border-color)">
+                    <span class="indicator-name" style="flex:1">${ind.name}</span>
+                    <span class="indicator-value ${sc}" style="font-size:0.75rem;margin-right:var(--space-2)">${ind.value}</span>
+                    <span class="badge badge-${bc}" style="font-size:0.65rem">${ind.signal}</span>
+                </div>`;
+            }).join('');
+        } else {
+            listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem">No raw indicators parsed.</div>';
+        }
     }
 }
 
@@ -757,7 +773,7 @@ function initSSE() {
         setBadge('live', '🟢 SSE Connected');
         document.getElementById('conn-dot')?.classList.remove('disconnected');
         document.getElementById('conn-text') && (document.getElementById('conn-text').textContent = 'Connected');
-        document.getElementById('ws-status-text') && (document.getElementById('ws-status-text').textContent = 'Real-time Server Stream Active');
+        document.getElementById('ws-status-text') && (document.getElementById('ws-status-text').textContent = 'Connected');
     };
     
     sseSource.onmessage = (event) => {
@@ -833,10 +849,15 @@ function initSSE() {
 }
 
 function setBadge(type, text) {
-    const b = document.getElementById('stream-badge');
-    if (!b) return;
-    b.textContent = text;
-    b.className = `badge ${type === 'live' ? 'badge-buy' : 'badge-warning'}`;
+    const dot = document.getElementById('global-status-dot');
+    if (!dot) return;
+    if (type === 'live') {
+        dot.style.background = 'var(--success)';
+        dot.style.boxShadow = '0 0 6px var(--success)';
+    } else {
+        dot.style.background = 'var(--warning)';
+        dot.style.boxShadow = '0 0 6px var(--warning)';
+    }
 }
 
 // SSE dynamically replaces the need for rest polling

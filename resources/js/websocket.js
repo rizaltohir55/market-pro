@@ -5,10 +5,6 @@
 
 export const WebSocketManager = {
     ws: null,
-    statusDot: null,
-    statusText: null,
-    connDot: null,
-    connText: null,
     reconnectTimer: null,
     reconnectAttempts: 0,
     maxReconnectAttempts: 10,
@@ -17,10 +13,6 @@ export const WebSocketManager = {
     init() {
         this.url = 'wss://data-stream.binance.vision/ws/!miniTicker@arr';
         this.ws = null;
-        this.statusDot = document.getElementById('ws-status-dot');
-        this.statusText = document.getElementById('ws-status-text');
-        this.connDot = document.getElementById('conn-dot');
-        this.connText = document.getElementById('conn-text');
 
         this.connect();
     },
@@ -116,65 +108,25 @@ export const WebSocketManager = {
     },
 
     updateUI(state) {
-        if (!this.statusDot || !this.connDot) return;
-
-        if (this.statusText) this.statusText.style.display = 'inline';
-
-        // Remove existing classes
-        this.statusDot.classList.remove('green', 'red', 'yellow');
-        this.connDot.classList.remove('green', 'red', 'yellow');
-        this.statusDot.style.animation = '';
-        this.connDot.style.animation = '';
+        const dot = document.getElementById('global-status-dot');
+        if (!dot) return;
 
         switch (state) {
             case 'connecting':
-                this.statusDot.classList.add('yellow');
-                this.statusDot.style.background = 'var(--warning)';
-                this.statusDot.style.boxShadow = '0 0 6px var(--warning)';
-                this.connDot.classList.add('yellow');
-                this.connDot.style.background = 'var(--warning)';
-                this.connDot.style.boxShadow = '0 0 6px var(--warning)';
-                if (this.statusText) this.statusText.textContent = 'CONNECTING';
-                if (this.statusText) this.statusText.style.color = 'var(--warning)';
-                if (this.connText) this.connText.textContent = 'Connecting...';
+                dot.style.background = 'var(--warning)';
+                dot.style.boxShadow = '0 0 6px var(--warning)';
                 break;
 
             case 'connected':
-                this.statusDot.classList.add('green');
-                this.statusDot.style.background = 'var(--success)';
-                this.statusDot.style.boxShadow = '0 0 6px var(--success)';
-                this.connDot.classList.add('green');
-                this.connDot.style.background = 'var(--success)';
-                this.connDot.style.boxShadow = '0 0 6px var(--success)';
-                this.statusDot.style.animation = 'pulse 2s infinite';
-                if (this.statusText) this.statusText.textContent = 'LIVE';
-                if (this.statusText) this.statusText.style.color = 'var(--success)';
-                if (this.connText) this.connText.textContent = 'Connected (WSS)';
+                dot.style.background = 'var(--success)';
+                dot.style.boxShadow = '0 0 8px var(--success)';
                 break;
 
             case 'disconnected':
             case 'error':
-                this.statusDot.classList.add('red');
-                this.statusDot.style.background = 'var(--danger)';
-                this.statusDot.style.boxShadow = '0 0 6px var(--danger)';
-                this.connDot.classList.add('red');
-                this.connDot.style.background = 'var(--danger)';
-                this.connDot.style.boxShadow = '0 0 6px var(--danger)';
-                if (this.statusText) this.statusText.textContent = 'RECONNECTING';
-                if (this.statusText) this.statusText.style.color = 'var(--danger)';
-                if (this.connText) this.connText.textContent = 'Offline';
-                break;
-
             case 'failed':
-                this.statusDot.classList.add('red');
-                this.statusDot.style.background = 'var(--danger)';
-                this.statusDot.style.boxShadow = '0 0 6px var(--danger)';
-                this.connDot.classList.add('red');
-                this.connDot.style.background = 'var(--danger)';
-                this.connDot.style.boxShadow = '0 0 6px var(--danger)';
-                if (this.statusText) this.statusText.textContent = 'PAUSED';
-                if (this.statusText) this.statusText.style.color = 'var(--danger)';
-                if (this.connText) this.connText.textContent = 'Retrying in 5m';
+                dot.style.background = 'var(--danger)';
+                dot.style.boxShadow = '0 0 6px var(--danger)';
                 break;
         }
     }

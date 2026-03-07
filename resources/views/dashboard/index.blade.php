@@ -7,11 +7,11 @@
 <div class="kpi-grid fade-in-up" id="kpi-grid" style="--delay: 0.1s;">
     @php
         $kpis = [
-            ['label' => 'IHSG', 'icon' => '🇮🇩', 'type' => 'stock'],
-            ['label' => 'S&P 500 ETF', 'icon' => '🇺🇸', 'type' => 'stock'],
-            ['label' => 'NASDAQ', 'icon' => '📈', 'type' => 'stock'],
-            ['label' => 'BTC/USDT', 'icon' => '₿', 'type' => 'crypto'],
-            ['label' => 'GOLD (XAU)', 'icon' => '🪙', 'type' => 'crypto'],
+            ['label' => 'IHSG', 'svg' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>', 'type' => 'stock', 'country' => 'ID'],
+            ['label' => 'S&P 500 ETF', 'svg' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>', 'type' => 'stock', 'country' => 'US'],
+            ['label' => 'NASDAQ', 'svg' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>', 'type' => 'stock', 'country' => null],
+            ['label' => 'BTC/USDT', 'svg' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 8h4a2 2 0 0 1 0 4H9z"/><path d="M9 12h4.5a2 2 0 0 1 0 4H9z"/><path d="M11 6v2"/><path d="M11 16v2"/><path d="M13 6v2"/><path d="M13 16v2"/></svg>', 'type' => 'crypto', 'country' => null],
+            ['label' => 'GOLD (XAU)', 'svg' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>', 'type' => 'crypto', 'country' => null],
         ];
     @endphp
 
@@ -19,7 +19,14 @@
     <div class="kpi-card js-tilt acrylic" id="kpi-card-{{ $i }}">
         <div class="kpi-header">
             <span class="kpi-label">{{ $kpi['label'] }}</span>
-            <span class="kpi-icon" style="font-size:1.2rem; filter:drop-shadow(0 0 8px var(--accent-glow))">{{ $kpi['icon'] }}</span>
+            <span class="kpi-icon" style="display:inline-flex;align-items:center;gap:4px;color:var(--accent);filter:drop-shadow(0 0 6px var(--accent-glow));">
+                @if($kpi['country'])
+                    <span style="font-family:var(--font-mono);font-size:0.7rem;font-weight:700;color:var(--text-muted);letter-spacing:0.05em;">{{ $kpi['country'] }}</span>
+                @endif
+                <span style="display:inline-block; width:18px; height:18px;">
+                    {!! str_replace('<svg ', '<svg width="18" height="18" ', $kpi['svg']) !!}
+                </span>
+            </span>
         </div>
         <div class="kpi-value">
             <div class="skeleton-value" style="height: 2rem; width: 100%;"></div>

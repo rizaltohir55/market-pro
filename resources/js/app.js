@@ -65,7 +65,7 @@ window.MarketAPI = {
         try {
             const url = new URL(this.localBase + localPath, window.location.origin);
             Object.entries(localParams).forEach(([k, v]) => url.searchParams.set(k, v));
-            const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
+            const res = await fetch(url.toString(), { signal: AbortSignal.timeout(15000) });
             if (res.ok) {
                 const data = await res.json();
                 if (data && (Array.isArray(data) ? data.length > 0 : Object.keys(data).length > 0)) {
@@ -234,7 +234,7 @@ window.initGlobalNewsTicker = async function () {
                     const headlines = uniqueHeadlines.map(n => {
                         const cleanHeadline = (n.headline || '').replace(/<[^>]*>?/gm, '').trim();
                         const url = n.url || '#';
-                        return `<a href="${url}" target="_blank" rel="noopener" style="margin-right: 3rem; position: relative; text-decoration: none; color: inherit;"><span style="color:var(--accent); margin-right:8px">◆</span>${cleanHeadline}</a>`;
+                        return `<a href="${url}" target="_blank" rel="noopener" style="margin-right: 3rem; position: relative; text-decoration: none; color: inherit;"><span style="color:var(--accent); margin-right:8px; display:inline-flex; align-items:center; filter:drop-shadow(0 0 6px var(--accent-glow));"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" style="animation: pulse 2s infinite;"><circle cx="12" cy="12" r="10"/></svg></span>${cleanHeadline}</a>`;
                     }).join('');
 
                     contentEl.innerHTML = `<div class="ticker-scroll">${headlines}${headlines}</div>`; // duplicated for smooth infinite scroll

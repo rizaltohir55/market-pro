@@ -131,7 +131,7 @@ function initSSE() {
     sseSource.onopen = () => {
         document.getElementById('conn-dot')?.classList.remove('disconnected');
         if (document.getElementById('conn-text')) document.getElementById('conn-text').textContent = 'Connected (SSE)';
-        if (document.getElementById('ws-status-text')) document.getElementById('ws-status-text').textContent = 'Real-time Server Stream Active';
+        if (document.getElementById('ws-status-text')) document.getElementById('ws-status-text').textContent = 'Connected';
     };
     
     sseSource.onmessage = (event) => {

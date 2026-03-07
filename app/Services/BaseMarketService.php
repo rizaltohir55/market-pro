@@ -158,12 +158,12 @@ abstract class BaseMarketService
         if (empty($key) || $key === 'your_finnhub_api_key_here') {
             return null;
         }
-        $response = Http::withOptions(['verify' => storage_path('cacert.pem')])
+        $response = Http::withOptions(['verify' => false]) // Bypass SSL for local dev issues
             ->withHeaders([
                 'User-Agent'      => 'Mozilla/5.0 Chrome/120',
                 'X-Finnhub-Token' => $key,
             ])
-            ->timeout(8)
+            ->timeout(20)
             ->get($this->finnhubBase . $path, $params);
             
         if ($response && $response->status() === 429) {

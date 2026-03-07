@@ -132,7 +132,7 @@ export const Dashboard = {
             card.innerHTML = `
                 <div class="kpi-header">
                     <span class="kpi-label">${label}</span>
-                    <span class="kpi-icon" style="font-size:1.2rem; filter:drop-shadow(0 0 8px var(--accent-glow))">${iconEl.textContent}</span>
+                    ${iconEl.outerHTML}
                 </div>
                 <div class="kpi-value text-mono">${prefix}${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 <div class="kpi-delta ${change >= 0 ? 'positive' : 'negative'}">

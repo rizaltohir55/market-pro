@@ -8,13 +8,38 @@
 
 {{-- Category Tabs --}}
 <div class="news-tabs fade-in-up" style="--delay: 0.05s; display:flex; gap: var(--space-2); margin-bottom: var(--space-4); flex-wrap: wrap; align-items: center;">
-    <button class="news-tab active" data-category="general" id="tab-general"><span class="tab-icon">🌐</span> General</button>
-    <button class="news-tab" data-category="markets" id="tab-markets"><span class="tab-icon">📈</span> Markets</button>
-    <button class="news-tab" data-category="economy" id="tab-economy"><span class="tab-icon">💼</span> Economy</button>
-    <button class="news-tab" data-category="tech" id="tab-tech"><span class="tab-icon">💻</span> Tech</button>
-    <button class="news-tab" data-category="politics" id="tab-politics"><span class="tab-icon">🏛️</span> Politics</button>
-    <button class="news-tab" data-category="business" id="tab-business"><span class="tab-icon">🏢</span> Business</button>
-    <button class="news-tab" data-category="bookmarks" id="tab-bookmarks" style="margin-left:auto; background: rgba(255,180,0,0.1); border-color: rgba(255,180,0,0.2);"><span class="tab-icon">🔖</span> Bookmarks</button>
+    <button class="news-tab active" data-category="general" id="tab-general">
+        <svg class="tab-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        General
+    </button>
+    <button class="news-tab" data-category="markets" id="tab-markets">
+        <svg class="tab-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        Markets
+    </button>
+    <button class="news-tab" data-category="economy" id="tab-economy">
+        <svg class="tab-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        Economy
+    </button>
+    <button class="news-tab" data-category="tech" id="tab-tech">
+        <svg class="tab-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Tech
+    </button>
+    <button class="news-tab" data-category="politics" id="tab-politics">
+        <svg class="tab-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Politics
+    </button>
+    <button class="news-tab" data-category="business" id="tab-business">
+        <svg class="tab-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+        Business
+    </button>
+    <button class="news-tab" data-category="calendar" id="tab-calendar">
+        <svg class="tab-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Economic Calendar
+    </button>
+    <button class="news-tab" data-category="bookmarks" id="tab-bookmarks" style="margin-left:auto; background: rgba(255,180,0,0.1); border-color: rgba(255,180,0,0.2);">
+        <svg class="tab-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        Bookmarks
+    </button>
     <div style="flex:1;"></div>
     {{-- Company News Search --}}
     <div class="company-search acrylic" style="display:flex; align-items:center; gap:8px; padding:6px 14px; border-radius:var(--radius-md); border:1px solid rgba(0,240,255,0.1);">
@@ -49,17 +74,33 @@
 
 {{-- News Grid --}}
 <div id="news-grid" class="news-grid fade-in-up" style="--delay: 0.2s;">
-    <div class="news-loading" id="news-loader">
-        <div class="news-loader-spinner"></div>
-        <span>Fetching live news from Finnhub...</span>
+</div>
+
+{{-- Economic Calendar Panel --}}
+<div id="calendar-panel" class="fade-in-up" style="--delay: 0.2s; display:none;">
+    <div class="calendar-filters acrylic" style="display:flex; gap:12px; margin-bottom:var(--space-4); padding:10px 15px; border-radius:var(--radius-md); border:1px solid rgba(255,255,255,0.05);">
+        <span style="font-size:0.75rem; color:var(--text-muted); align-self:center;">Impact Filter:</span>
+        <button class="filter-btn active" onclick="filterCalendar('all')">All</button>
+        <button class="filter-btn" onclick="filterCalendar('high')"><span style="color:var(--danger);">●</span> High</button>
+        <button class="filter-btn" onclick="filterCalendar('medium')"><span style="color:var(--warning);">●</span> Medium</button>
+        <button class="filter-btn" onclick="filterCalendar('low')"><span style="color:var(--success);">●</span> Low</button>
+    </div>
+    <div id="calendar-list" class="calendar-grid">
+        <!-- Populated by JS -->
     </div>
 </div>
 
 {{-- Company News Panel --}}
 <div id="company-news-panel" class="panel acrylic fade-in-up" style="display:none; margin-top: var(--space-4);">
     <div class="panel-header">
-        <span class="panel-title">🏢 <span id="company-news-title">Company News</span></span>
-        <button class="btn btn-ghost btn-sm" onclick="closeCompanyNews()">✕ Close</button>
+        <span class="panel-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+            <span id="company-news-title">Company News</span>
+        </span>
+        <button class="btn btn-ghost btn-sm" onclick="closeCompanyNews()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Close
+        </button>
     </div>
     <div class="panel-body" id="company-news-body">
         <div style="text-align:center; padding:2rem; color:var(--text-muted);">Loading...</div>
@@ -134,10 +175,16 @@ async function fetchNews(category) {
     if (statusEl) statusEl.textContent = `Loading ${category} news...`;
 
     try {
-        const r = await fetch(`/api/market/news?category=${category}`, { signal: AbortSignal.timeout(15000) });
+        const url = category === 'calendar' ? '/api/market/economic-calendar' : `/api/market/news?category=${category}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(30000) });
         if (!r.ok) throw new Error('API error');
         const data = await r.json();
         newsData[category] = data;
+
+        if (category === 'calendar') {
+             renderCalendar();
+             return;
+        }
 
         if (category === 'general' || category === 'markets') {
             checkPushNotifications(data);
@@ -205,13 +252,27 @@ async function toggleBookmark(event, articleJson) {
 
 function refreshNews() {
     newsData[currentCategory] = null;
-    fetchNews(currentCategory);
+    if (currentCategory === 'calendar') fetchNews('calendar');
+    else fetchNews(currentCategory);
 }
 
 function renderNews() {
-    let data = newsData[currentCategory];
     const grid = document.getElementById('news-grid');
     const hero = document.getElementById('hero-article');
+    const calendarPanel = document.getElementById('calendar-panel');
+
+    if (currentCategory === 'calendar') {
+        grid.style.display = 'none';
+        hero.style.display = 'none';
+        calendarPanel.style.display = 'block';
+        renderCalendar();
+        return;
+    } else {
+        grid.style.display = 'grid';
+        calendarPanel.style.display = 'none';
+    }
+
+    let data = newsData[currentCategory];
     const statusEl = document.getElementById('news-status');
     const countEl = document.getElementById('news-count');
     const filterInput = document.getElementById('news-filter-input');
@@ -228,7 +289,7 @@ function renderNews() {
         data = data.filter(a => (a.headline && a.headline.toLowerCase().includes(q)) || (a.summary && a.summary.toLowerCase().includes(q)));
     }
 
-    const catLabels = { general: '🌐 General', markets: '📈 Markets', economy: '💼 Economy', tech: '💻 Tech', politics: '🏛️ Politics', business: '🏢 Business', bookmarks: '🔖 Bookmarks' };
+    const catLabels = { general: 'General', markets: 'Markets', economy: 'Economy', tech: 'Tech', politics: 'Politics', business: 'Business', bookmarks: 'Bookmarks' };
     if (statusEl) statusEl.textContent = `${catLabels[currentCategory] || 'General'} — ${currentCategory === 'bookmarks' ? 'Saved' : 'Live News'}`;
     if (countEl) countEl.textContent = `${data.length} articles`;
 
@@ -288,8 +349,8 @@ function renderNews() {
 
     // Grid articles
     const articles = heroArticle ? data.filter(a => a !== heroArticle) : data;
-    const catIcons = { general: '🌐', markets: '📈', economy: '💼', tech: '💻', politics: '🏛️', business: '🏢', bookmarks: '🔖' };
-    const catIcon = catIcons[currentCategory] || '📰';
+    const catIcons = { general: 'NEWS', markets: 'MKTS', economy: 'ECON', tech: 'TECH', politics: 'POL', business: 'BIZ', bookmarks: 'BKMK' };
+    const catIcon = catIcons[currentCategory] || 'NEWS';
     
     if (articles.length === 0 && currentCategory !== 'bookmarks') {
          grid.innerHTML = `<div class="news-loading"><span>No articles match your filter.</span></div>`;
@@ -307,7 +368,7 @@ function renderNews() {
             : `<div class="news-card-abstract">
                    <div class="abstract-pattern"></div>
                    <div class="abstract-content">
-                       <span class="abstract-icon">${catIcon}</span>
+                       <span class="abstract-icon-wrapper" style="color:var(--accent); font-weight:800; font-size:1.6rem; font-family:var(--font-mono); filter:drop-shadow(0 0 8px var(--accent-glow)); letter-spacing:0.1em; opacity: 0.9;">${catIcon}</span>
                        <span class="abstract-source">${a.source}</span>
                    </div>
                </div>`;
@@ -381,6 +442,87 @@ function closeCompanyNews() {
     document.getElementById('company-news-panel').style.display = 'none';
 }
 
+let calendarImpactFilter = 'all';
+
+function filterCalendar(impact) {
+    calendarImpactFilter = impact;
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase().includes(impact) || (impact === 'all' && btn.textContent === 'All'));
+    });
+    renderCalendar();
+}
+
+function renderCalendar() {
+    let data = newsData['calendar'];
+    const container = document.getElementById('calendar-list');
+    const statusEl = document.getElementById('news-status');
+    const countEl = document.getElementById('news-count');
+    
+    if (!data || !data.length) {
+        container.innerHTML = `<div class="news-loading"><div class="news-loader-spinner"></div><span>Fetching Economic Calendar...</span></div>`;
+        return;
+    }
+
+    // Update status bar for calendar
+    if (statusEl) statusEl.textContent = `Economic Calendar — Live Events`;
+
+    if (calendarImpactFilter !== 'all') {
+        data = data.filter(e => e.importance.toLowerCase() === calendarImpactFilter);
+    }
+
+    if (countEl) countEl.textContent = `${data.length} events`;
+
+    if (data.length === 0) {
+        container.innerHTML = `<div style="text-align:center; padding:3rem; color:var(--text-muted);">No ${calendarImpactFilter} impact events found for the next 7 days.</div>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="calendar-table-header">
+            <div style="flex: 0 0 80px;">Time</div>
+            <div style="flex: 0 0 60px;">Cur</div>
+            <div style="flex: 1;">Event</div>
+            <div style="flex: 0 0 80px; text-align:center;">Impact</div>
+            <div style="flex: 0 0 80px; text-align:right;">Actual</div>
+            <div style="flex: 0 0 80px; text-align:right;">Forecast</div>
+            <div style="flex: 0 0 80px; text-align:right;">Prev</div>
+        </div>
+        ${data.map(e => {
+            const isSoon = e.timestamp > (Date.now()/1000) && e.timestamp < (Date.now()/1000 + 3600);
+            const isPast = e.timestamp < (Date.now()/1000);
+            const impactColor = e.importance === 'high' ? 'var(--danger)' : (e.importance === 'medium' ? 'var(--warning)' : 'var(--success)');
+            
+            return `
+            <div class="calendar-row ${isSoon ? 'event-soon' : ''} ${isPast ? 'event-past' : ''}">
+                <div style="flex: 0 0 80px; font-family:var(--font-mono); font-size:0.75rem;">
+                    ${new Date(e.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    <div style="font-size:0.6rem; color:var(--text-muted);">${new Date(e.timestamp * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' })}</div>
+                </div>
+                <div style="flex: 0 0 60px; display:flex; align-items:center; gap:4px;">
+                    <span class="currency-flag">${e.currency}</span>
+                </div>
+                <div style="flex: 1; font-weight:600; font-size:0.85rem; color:var(--text-primary);">
+                    ${e.event}
+                    ${isSoon ? '<span class="soon-badge">STARTS SOON</span>' : ''}
+                </div>
+                <div style="flex: 0 0 80px; display:flex; justify-content:center;">
+                    <span class="impact-dot" style="background:${impactColor}; box-shadow:0 0 8px ${impactColor}44;"></span>
+                </div>
+                <div style="flex: 0 0 80px; text-align:right; font-family:var(--font-mono); font-size:0.8rem; color:${e.actual ? 'var(--text-primary)' : 'var(--text-muted)'}">
+                    ${e.actual || '--'}
+                </div>
+                <div style="flex: 0 0 80px; text-align:right; font-family:var(--font-mono); font-size:0.8rem; color:var(--text-muted)">
+                    ${e.forecast || '--'}
+                </div>
+                <div style="flex: 0 0 80px; text-align:right; font-family:var(--font-mono); font-size:0.8rem; color:var(--text-muted)">
+                    ${e.previous || '--'}
+                </div>
+            </div>
+            `;
+        }).join('')}
+    `;
+}
+
 function timeAgo(unixTimestamp) {
     if (!unixTimestamp) return '';
     const now = Math.floor(Date.now() / 1000);
@@ -406,6 +548,79 @@ function truncate(str, n) {
 </script>
 
 <style>
+
+/* ─── Economic Calendar ─────────────────────────────────────────── */
+.calendar-grid {
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 10, 20, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.calendar-table-header {
+    display: flex;
+    padding: 12px 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+.calendar-row {
+    display: flex;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    transition: all 0.2s ease;
+    align-items: center;
+}
+.calendar-row:hover {
+    background: rgba(0, 240, 255, 0.03);
+}
+.calendar-row.event-soon {
+    background: rgba(245, 158, 11, 0.05);
+    border-left: 3px solid var(--warning);
+}
+.calendar-row.event-past {
+    opacity: 0.6;
+}
+.impact-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.soon-badge {
+    font-size: 0.6rem;
+    padding: 1px 6px;
+    background: var(--warning);
+    color: #000;
+    border-radius: 4px;
+    margin-left: 8px;
+    font-weight: 800;
+    animation: pulse 1.5s infinite;
+}
+.filter-btn {
+    padding: 4px 12px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.filter-btn:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: var(--text-primary);
+}
+.filter-btn.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: 700;
+}
 
 /* ─── Bookmark Button ──────────────────────────────────────────── */
 .news-bk-btn {
