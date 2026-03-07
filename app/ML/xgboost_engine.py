@@ -12,6 +12,48 @@ def calculate_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
+def add_features(df):
+    df = df.copy()
+    
+    # 1. Lags
+    for i in range(1, 11):
+        df[f'lag_{i}'] = df['close'].shift(i)
+    
+    # 2. Indicators
+    df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
+    df['ema_21'] = df['close'].ewm(span=21, adjust=False).mean()
+    df['rsi'] = calculate_rsi(df['close'], 14)
+    
+    # 3. MACD
+    exp1 = df['close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['close'].ewm(span=26, adjust=False).mean()
+    df['macd'] = exp1 - exp2
+    
+    # 4. Momentum & Volatility
+    df['roc'] = df['close'].pct_change(periods=5)
+    df['volatility'] = df['close'].rolling(window=10).std()
+    
+    # 5. Volatility-Adjusted Features (ATR Ratio)
+    high_low = df['high'] - df['low']
+    high_close = np.abs(df['high'] - df['close'].shift())
+    low_close = np.abs(df['low'] - df['close'].shift())
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    df['atr'] = true_range.rolling(window=14).mean()
+    df['atr_ratio'] = df['atr'] / df['close']
+    
+    # 6. VWAP Distance (Safe Division)
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    tp_v = typical_price * df['volume']
+    cum_vol = df['volume'].cumsum()
+    df['vwap'] = np.where(cum_vol > 0, tp_v.cumsum() / cum_vol, typical_price)
+    df['vwap_dist'] = np.where(df['vwap'] != 0, (df['close'] - df['vwap']) / df['vwap'], 0)
+    
+    # 7. Volume Change (Fill NaNs)
+    df['vol_change_pct'] = df['volume'].pct_change(periods=1).fillna(0)
+    
+    return df
+
 def main():
     try:
         # Read input from stdin
@@ -35,45 +77,8 @@ def main():
             if col in df.columns:
                 df[col] = df[col].astype(float)
         
-        # --- Advanced Feature Engineering ---
-        # 1. Lags
-        for i in range(1, 11):
-            df[f'lag_{i}'] = df['close'].shift(i)
-        
-        # 2. Indicators
-        df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
-        df['ema_21'] = df['close'].ewm(span=21, adjust=False).mean()
-        df['rsi'] = calculate_rsi(df['close'], 14)
-        
-        # 3. MACD
-        exp1 = df['close'].ewm(span=12, adjust=False).mean()
-        exp2 = df['close'].ewm(span=26, adjust=False).mean()
-        df['macd'] = exp1 - exp2
-        
-        # 4. Momentum & Volatility
-        df['roc'] = df['close'].pct_change(periods=5)
-        df['volatility'] = df['close'].rolling(window=10).std()
-        
-        # 5. Volatility-Adjusted Features (ATR Ratio)
-        high_low = df['high'] - df['low']
-        high_close = np.abs(df['high'] - df['close'].shift())
-        low_close = np.abs(df['low'] - df['close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = ranges.max(axis=1)
-        df['atr'] = true_range.rolling(window=14).mean()
-        df['atr_ratio'] = df['atr'] / df['close']
-        
-        # 6. VWAP Distance
-        typical_price = (df['high'] + df['low'] + df['close']) / 3
-        tp_v = typical_price * df['volume']
-        df['vwap'] = tp_v.cumsum() / df['volume'].cumsum()
-        df['vwap_dist'] = (df['close'] - df['vwap']) / df['vwap']
-        
-        # 7. Volume Change
-        df['vol_change_pct'] = df['volume'].pct_change(periods=1)
-        
-        # Drop NaNs
-        df = df.dropna()
+        # Apply Feature Engineering
+        df = add_features(df).dropna()
         
         if df.empty:
             print(json.dumps({"error": "Dataframe empty after feature engineering"}))
@@ -91,11 +96,11 @@ def main():
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        # Train model with tuned parameters
+        # Train model
         model = XGBRegressor(
-            n_estimators=30, # Slightly more estimators for added features
+            n_estimators=30,
             learning_rate=0.08,
-            max_depth=5,     # Increased depth for complex interactions
+            max_depth=5,
             colsample_bytree=0.8,
             subsample=0.8,
             objective='reg:squarederror',
@@ -104,22 +109,35 @@ def main():
         )
         model.fit(X_scaled, y)
 
-        # Forecast (Recursive)
-        last_row = X[-1].copy()
+        # Forecast (Recursive with Dynamic Indicators)
         forecast = []
+        df_forecast = df.copy()
         
         for _ in range(forecast_steps):
-            # Scale the input
-            row_scaled = scaler.transform(last_row.reshape(1, -1))
+            # 1. Prepare current features from the VERY LAST row
+            current_features = df_forecast[all_features].iloc[-1:].values
+            row_scaled = scaler.transform(current_features)
+            
+            # 2. Predict next close
             pred = float(model.predict(row_scaled)[0])
             forecast.append(pred)
             
-            # Update lags for next step
-            new_row = last_row.copy()
-            new_row[1:10] = last_row[0:9] # shift lags
-            new_row[0] = pred # Newest lag
-            # Note: Indicators remain static in this simplified recursive forecast
-            last_row = new_row
+            # 3. Append predicted row to df_forecast
+            last_close = df_forecast['close'].iloc[-1]
+            last_volume = df_forecast['volume'].tail(20).median()
+            
+            new_row = {
+                'open': last_close,
+                'high': max(last_close, pred),
+                'low': min(last_close, pred),
+                'close': pred,
+                'volume': last_volume
+            }
+            
+            # Simple concat and recalculate ALL features
+            # (Recalculating everything ensures RSI/EMA/MACD are perfectly continuity)
+            df_forecast = pd.concat([df_forecast, pd.DataFrame([new_row])], ignore_index=True)
+            df_forecast = add_features(df_forecast)
 
         # Accuracy Metric (R2)
         r_squared = float(model.score(X_scaled, y))
@@ -132,7 +150,7 @@ def main():
         print(json.dumps({
             "forecast": forecast,
             "r_squared": r_squared,
-            "model_type": "XGBoost (Ultra V4)",
+            "model_type": "XGBoost (Ultra V5)",
             "top_features": top_features,
             "features_used": all_features
         }))

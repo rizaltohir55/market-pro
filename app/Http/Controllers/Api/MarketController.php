@@ -78,7 +78,9 @@ class MarketController extends Controller
             $symbols = explode(',', $symbols);
         }
 
-        $symbols = array_slice(array_filter(array_map('trim', $symbols)), 0, 50);
+        $symbols = array_slice(array_filter(array_map(function($s) {
+            return is_scalar($s) ? trim((string)$s) : '';
+        }, $symbols)), 0, 50);
         $results = [];
 
         foreach ($symbols as $symbol) {

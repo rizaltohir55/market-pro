@@ -396,6 +396,7 @@ class PredictionService
 
         // --- 9. VOLATILITY FILTER (Whipsaw Prevention) ---
         $volatilityFilter = false;
+        $atrHist = $this->ta->calculateATR($klines, 14);
         if (!empty($atrHist)) {
             $lastAtr = end($atrHist);
             // Calculate mean ATR of last 50 periods

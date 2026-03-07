@@ -55,28 +55,36 @@ class MultiSourceMarketService
     /** Cache key to remember the last working Binance endpoint across requests. */
     private function getWorkingBinanceBase(): string
     {
-        // Use cached working endpoint to avoid retrying failed ones on every request
-        return Cache::remember('binance_working_endpoint', 300, function () {
-            foreach ($this->binanceEndpoints as $base) {
-                try {
-                    $r = Http::withOptions([
-                            'verify' => storage_path('cacert.pem'),
-                        ])
-                        ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
-                        ->timeout(6)
-                        ->get($base . '/api/v3/ping');
+        $cacheKey = 'binance_working_endpoint';
+        $cached = Cache::get($cacheKey);
+        if ($cached) {
+            return $cached;
+        }
 
-                    if ($r->successful()) {
-                        Log::info('MarketService: Working Binance endpoint found: ' . $base);
-                        return $base;
-                    }
-                } catch (\Exception $e) {
-                    // try next
+        $cacert = storage_path('cacert.pem');
+        $verify = file_exists($cacert) ? $cacert : true;
+
+        foreach ($this->binanceEndpoints as $base) {
+            try {
+                $r = Http::withOptions([
+                        'verify' => $verify,
+                    ])
+                    ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
+                    ->timeout(6)
+                    ->get($base . '/api/v3/ping');
+
+                if ($r->successful()) {
+                    Log::info('MarketService: Working Binance endpoint found and cached: ' . $base);
+                    Cache::put($cacheKey, $base, 300);
+                    return $base;
                 }
+            } catch (\Exception $e) {
+                // try next
             }
-            Log::warning('MarketService: No Binance endpoint reachable.');
-            return $this->binanceEndpoints[0]; // default to first even if unreachable
-        }) ?? $this->binanceEndpoints[0];
+        }
+
+        Log::warning('MarketService: No Binance endpoint reachable. Returning fallback without caching.');
+        return $this->binanceEndpoints[0]; 
     }
 
     // ─── HTTP HELPERS ────────────────────────────────────────────────────────
