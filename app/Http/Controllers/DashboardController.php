@@ -8,6 +8,7 @@ use App\Services\CommodityMarketService;
 use App\Services\MultiSourceMarketService;
 use App\Services\PredictionService;
 use App\Services\TechnicalAnalysisService;
+use App\Services\BondMarketService;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
@@ -62,6 +63,14 @@ class DashboardController extends Controller
     {
         return response()->json([
             'forex' => $forexMarket->getForexRates(),
+            'commodities' => $commodityMarket->getCommodityPrices(),
+        ]);
+    }
+
+    public function getGlobalOverview(BondMarketService $bondMarket, CommodityMarketService $commodityMarket)
+    {
+        return response()->json([
+            'bonds' => $bondMarket->getTreasuryYields(),
             'commodities' => $commodityMarket->getCommodityPrices(),
         ]);
     }
@@ -140,9 +149,9 @@ class DashboardController extends Controller
         $klines1h  = $market->getKlines($symbol, '1h',  200);
         $klines4h  = $market->getKlines($symbol, '4h',  200);
 
-        $signal15m = $prediction->getScalpingSignal($klines15m);
-        $signal1h  = $prediction->getScalpingSignal($klines1h);
-        $signal4h  = $prediction->getScalpingSignal($klines4h);
+        $signal15m = $prediction->getScalpingSignal($klines15m, $symbol, '15m');
+        $signal1h  = $prediction->getScalpingSignal($klines1h,  $symbol, '1h');
+        $signal4h  = $prediction->getScalpingSignal($klines4h,  $symbol, '4h');
 
         $tickerData = $market->getTicker24hr($symbol);
         $ta         = app(TechnicalAnalysisService::class);

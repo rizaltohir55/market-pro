@@ -114,8 +114,6 @@
                     <option value="Line">Line</option>
                 </select>
                 <button class="btn btn-ghost btn-sm" id="btn-gp-indicators">GP ▾</button>
-                <button class="btn btn-ghost btn-sm" id="btn-compare-rp">Compare (RP)</button>
-                <button class="btn btn-ghost btn-sm" id="btn-builder-g" onclick="window.location.href='/chart-builder?symbols={{$symbol}}'">Builder (G)</button>
             </div>
             
             <span class="text-small" style="margin-left:auto;text-shadow:0 0 10px rgba(255,255,255,0.2)">Edge-to-Edge Holographic Chart</span>
@@ -134,13 +132,6 @@
             </div>
         </div>
         
-        {{-- Compare Prompt --}}
-        <div id="compare-rp-panel" class="panel acrylic" style="display:none; position: absolute; z-index: 50; margin-top: 50px; margin-left: 200px; padding: var(--space-3); border: 1px solid var(--border);">
-            <div style="font-size: 0.8rem; font-weight: bold; margin-bottom: 8px;">Relative Performance (RP)</div>
-            <input type="text" id="compare-symbol-input" placeholder="Symbol (e.g. ETHUSDT)" class="form-control" style="font-size: 0.75rem; padding: 4px; width: 150px;">
-            <button id="btn-add-compare" class="btn btn-sm btn-primary" style="margin-top: 8px; width: 100%;">Add Overlay</button>
-            <div id="compare-active-list" style="margin-top: 8px; font-size: 0.7rem; color: var(--text-muted);"></div>
-        </div>
         <div class="chart-container" id="chart-container" style="flex:1; width:100%;">
             <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">
                 <span>Loading immersive chart...</span>
@@ -267,8 +258,42 @@
                 </div>
             @endif
         @endif
+
+        {{-- Live TV News Panel --}}
+        <div class="panel acrylic fade-in-up" style="--delay: 0.4s; flex-shrink: 0; margin-top: auto;">
+            <div class="panel-header" style="padding: 10px 14px; background: rgba(0,0,0,0.25); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <span class="panel-title" style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" style="filter: drop-shadow(0 0 5x var(--danger))"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33 2.78 2.78 0 0 0 1.94 2c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+                    Live Financial News
+                </span>
+                <div class="panel-actions">
+                    <span class="live-indicator-small" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.65rem; color: var(--danger); font-weight: 700; text-transform: uppercase;"><div style="width: 4px; height: 4px; border-radius: 50%; background: var(--danger); animation: pulse-red 2s infinite;"></div> LIVE</span>
+                </div>
+            </div>
+            <div class="panel-body no-padding">
+                <div style="padding: 8px; background: rgba(0,0,0,0.15); border-bottom: 1px solid rgba(255,255,255,0.03);">
+                    <select id="live-tv-channel-trading" class="form-control" style="width: 100%; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: 0.75rem; background-color: rgba(255,255,255,0.05); color: var(--text-primary); border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; cursor: pointer; appearance: auto;" onchange="changeLiveTvChannelTrading()">
+                        <option value="iEpJwprxDdk">Bloomberg Television</option>
+                        <option value="KQp-e_XQnDE">Yahoo Finance</option>
+                        <option value="XWq5kBlakcQ">CNA</option>
+                        <option value="LuKwFajn37U">DW News</option>
+                    </select>
+                </div>
+                <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; background: #000;">
+                    <iframe id="live-tv-iframe-trading" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" src="https://www.youtube.com/embed/iEpJwprxDdk?autoplay=1&mute=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
+<script>
+    function changeLiveTvChannelTrading() {
+        var videoId = document.getElementById('live-tv-channel-trading').value;
+        var iframe = document.getElementById('live-tv-iframe-trading');
+        iframe.src = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&mute=1";
+    }
+</script>
 
 {{-- Bottom section: News (Unified) --}}
 <div class="grid-1 fade-in-up" style="--delay: 0.4s; margin-top: var(--space-4)">
@@ -329,6 +354,9 @@ document.addEventListener('DOMContentLoaded', function() {
     fetchNews();
     
     initTimeframeSelector();
+    
+    // Bind tool logic ONCE
+    initChartTools();
 });
 
 // ─── CHART ───────────────────────────────────────────────────
@@ -338,7 +366,6 @@ let currentChartType = 'Candlestick'; // Candlestick, Bar, Line
 
 // Store indicator series references to remove them
 let indicatorSeries = {};
-let compareSeries = {};
 
 // We need base data available globally for indicators
 let baseData = []; 
@@ -356,7 +383,7 @@ function initChart(klines) {
             vertLine: { color: '#f59e0b44', width: 1, style: 2 },
             horzLine: { color: '#f59e0b44', width: 1, style: 2 },
         },
-        rightPriceScale: { borderColor: '#1e293b', scaleMargins: { top: 0.1, bottom: 0.2 } },
+        rightPriceScale: { borderColor: '#1e293b', scaleMargins: { top: 0.1, bottom: 0.25 } },
         timeScale: { borderColor: '#1e293b', timeVisible: true, secondsVisible: false },
     });
 
@@ -367,7 +394,10 @@ function initChart(klines) {
 
     volumeSeries = chart.addHistogramSeries({
         color: '#3b82f6', priceFormat: { type: 'volume' },
-        priceScaleId: '', scaleMargins: { top: 0.85, bottom: 0 },
+        priceScaleId: '',
+        scaleMargins: { top: 0.85, bottom: 0 },
+        // To prevent overlap, we add an overlay flag if the library version supports it, 
+        // but the main fix is keeping priceScaleId: '' and ensuring the top margin is large enough.
     });
 
     if (klines && klines.length) {
@@ -394,8 +424,6 @@ function initChart(klines) {
         const { width, height } = entries[0].contentRect;
         if (width > 0 && height > 0) chart.applyOptions({ width, height });
     }).observe(container);
-
-    initChartTools();
 }
 
 function updateSeriesCurrentBar(tickBar) {
@@ -429,7 +457,6 @@ function initChartTools() {
     const gpPanel = document.getElementById('gp-indicators-panel');
     gpBtn.addEventListener('click', () => {
         gpPanel.style.display = gpPanel.style.display === 'none' ? 'block' : 'none';
-        comparePanel.style.display = 'none';
     });
     
     // Auto-open if query param mode=gp
@@ -442,22 +469,6 @@ function initChartTools() {
         cb.addEventListener('change', (e) => {
             toggleIndicator(e.target.value, e.target.checked);
         });
-    });
-
-    // 3. Compare (RP)
-    const compareBtn = document.getElementById('btn-compare-rp');
-    const comparePanel = document.getElementById('compare-rp-panel');
-    compareBtn.addEventListener('click', () => {
-        comparePanel.style.display = comparePanel.style.display === 'none' ? 'block' : 'none';
-        gpPanel.style.display = 'none';
-    });
-
-    document.getElementById('btn-add-compare').addEventListener('click', () => {
-        const sym = document.getElementById('compare-symbol-input').value.trim().toUpperCase();
-        if (sym && !compareSeries[sym]) {
-            addCompareSeries(sym);
-            document.getElementById('compare-symbol-input').value = '';
-        }
     });
 }
 
@@ -533,66 +544,6 @@ function toggleIndicator(id, active) {
             
             indicatorSeries[id] = [machSeries, maclSeries, sigSeries];
         }
-    }
-}
-
-async function addCompareSeries(symbol) {
-    try {
-        const btn = document.getElementById('btn-add-compare');
-        btn.textContent = 'Loading...';
-        btn.disabled = true;
-
-        const res = await fetch(`/api/market/klines?symbol=${symbol}&interval=${currentInterval}&limit=200`);
-        if (!res.ok) throw new Error('Failed');
-        const data = await res.json();
-        
-        if (data && data.length) {
-            // Switch current price scale to percentage so overlay makes sense
-            chart.rightPriceScale().applyOptions({ mode: LightweightCharts.PriceScaleMode.Percentage });
-            
-            const sorted = [...data].sort((a,b) => a.time - b.time);
-            const lineData = sorted.map(k => ({ time: k.time, value: k.close }));
-            
-            const color = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
-            const series = chart.addLineSeries({ color: color, lineWidth: 2, priceScaleId: 'right' });
-            series.setData(lineData);
-            
-            compareSeries[symbol] = series;
-            
-            // Add UI chip
-            const list = document.getElementById('compare-active-list');
-            const chip = document.createElement('div');
-            chip.style.display = 'inline-flex';
-            chip.style.alignItems = 'center';
-            chip.style.gap = '4px';
-            chip.style.background = 'rgba(255,255,255,0.1)';
-            chip.style.padding = '2px 6px';
-            chip.style.borderRadius = '4px';
-            chip.style.margin = '2px';
-            chip.innerHTML = `<span style="color:${color};font-weight:bold">${symbol}</span> <span style="cursor:pointer;color:var(--danger)" onclick="window.removeCompare('${symbol}', this)">×</span>`;
-            list.appendChild(chip);
-        } else {
-            alert('No data for symbol ' + symbol);
-        }
-    } catch (e) {
-        alert('Could not overlay ' + symbol);
-    } finally {
-        const btn = document.getElementById('btn-add-compare');
-        btn.textContent = 'Add Overlay';
-        btn.disabled = false;
-    }
-}
-
-window.removeCompare = function(symbol, el) {
-    if (compareSeries[symbol]) {
-        chart.removeSeries(compareSeries[symbol]);
-        delete compareSeries[symbol];
-    }
-    el.parentNode.remove();
-    
-    // Switch back to normal mode if no compares left
-    if (Object.keys(compareSeries).length === 0) {
-        chart.rightPriceScale().applyOptions({ mode: LightweightCharts.PriceScaleMode.Normal });
     }
 }
 
@@ -688,9 +639,9 @@ function renderPrediction(data) {
     const predTargets = document.getElementById('prediction-targets');
     if (predTargets) predTargets.style.display = 'block';
     
-    // Choose TP/SL based on direction
-    const tp = data.signal.includes('BUY') ? data.price_target_buy : data.price_target_sell;
-    const sl = data.signal.includes('BUY') ? data.stop_loss_buy : data.stop_loss_sell;
+    // Choose TP/SL from high-accuracy levels
+    const tp = data.tp || data.price_target_buy || data.price_target_sell;
+    const sl = data.sl || data.stop_loss_buy || data.stop_loss_sell;
     
     const tpEl = document.getElementById('target-tp');
     const slEl = document.getElementById('target-sl');
@@ -870,6 +821,11 @@ function initTimeframeSelector() {
             document.querySelectorAll('#timeframe-selector button').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             currentInterval = tf;
+            
+            // Cleanup GP indicators on timeframe change
+            indicatorSeries = {};
+            document.querySelectorAll('.indicator-toggle').forEach(cb => cb.checked = false);
+            
             if (sseSource) { try { sseSource.close(); } catch(e){} }
             if (typeof binanceWS !== 'undefined' && binanceWS) { try { binanceWS.close(); } catch(e){} }
             fetchAndRenderChart(SYMBOL, tf).then(() => { initSSE(); initBinanceWS(); });
@@ -935,6 +891,8 @@ function renderTrades(trades) {
 }
 
 function formatPrice(price) {
+    if (price === undefined || price === null || isNaN(price)) return '--';
+    if (typeof price === 'string') price = parseFloat(price);
     if (price >= 1000) return price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
     if (price >= 1) return price.toFixed(2);
     if (price >= 0.01) return price.toFixed(4);

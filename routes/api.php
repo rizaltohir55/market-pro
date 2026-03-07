@@ -53,6 +53,7 @@ Route::prefix('market')->group(function () {
     Route::get('/dashboard/market-summary', [\App\Http\Controllers\DashboardController::class, 'getMarketSummary']);
     Route::get('/dashboard/stock-summary',  [\App\Http\Controllers\DashboardController::class, 'getStockSummary']);
     Route::get('/dashboard/global-rates',   [\App\Http\Controllers\DashboardController::class, 'getGlobalRates']);
+    Route::get('/dashboard/global-overview', [\App\Http\Controllers\DashboardController::class, 'getGlobalOverview']);
 
     // ─── Terminal ────────────────────────────────────────────────────────────
     Route::get('/terminal',      [MarketController::class, 'terminal']);

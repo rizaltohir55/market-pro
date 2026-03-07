@@ -85,25 +85,13 @@ class CryptoMarketService extends BaseMarketService
                         
                         $futures = [];
                         foreach ($top as $t) {
-                            $sym = $t['symbol'];
-                            
-                            // Mock a typical realistic funding rate since FAPI is blocked
-                            // Usually between -0.0100% and 0.0100% across the market
-                            $hash = crc32($sym . date('Y-m-d H')); // stable for an hour
-                            $mockFundingRate = (($hash % 100) / 10000) - 0.005; 
-                            if ($t['priceChangePercent'] < -5) {
-                                $mockFundingRate -= 0.005; // heavier negative if dumping
-                            } else if ($t['priceChangePercent'] > 5) {
-                                $mockFundingRate += 0.005; // positive if pumping
-                            }
-                            
                             $futures[] = [
-                                'symbol' => $sym,
+                                'symbol' => $t['symbol'],
                                 'price'  => (float) $t['lastPrice'],
                                 'change_pct' => (float) $t['priceChangePercent'],
                                 'volume' => (float) $t['quoteVolume'],
-                                'funding_rate' => $mockFundingRate,
-                                'next_funding_time' => time() * 1000 + (3600 * 8 * 1000), // ~8 hours
+                                'funding_rate' => 0.0, // Real-time funding requires FAPI access
+                                'next_funding_time' => 0,
                                 'mark_price' => (float) $t['lastPrice'],
                             ];
                         }

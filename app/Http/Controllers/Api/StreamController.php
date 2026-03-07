@@ -37,13 +37,23 @@ class StreamController extends Controller
                     $payload['ticker'] = $market->getTicker24hr($symbol);
                     $payload['depth']  = $market->getDepth($symbol, 20);
                     $payload['trades'] = $market->getRecentTrades($symbol, 50);
-                    $payload['klines'] = $market->getKlines($symbol, $interval, 200);
+                    $klinesCurrent = $market->getKlines($symbol, $interval, 200);
+                    $payload['klines'] = $klinesCurrent;
 
-                    $klines15m = $market->getKlines($symbol, '15m', 200);
-                    $klines1h  = $market->getKlines($symbol, '1h', 200);
+                    if ($interval === '15m') {
+                        $klines15m = $klinesCurrent;
+                    } else {
+                        $klines15m = $market->getKlines($symbol, '15m', 200);
+                    }
+
+                    if ($interval === '1h') {
+                        $klines1h = $klinesCurrent;
+                    } else {
+                        $klines1h = $market->getKlines($symbol, '1h', 200);
+                    }
 
                     $payload['predictions'] = [
-                        '15m' => $prediction->getScalpingSignal($klines15m, $klines1h, $fearGreed, $lsRatio, $isTrending),
+                        '15m' => $prediction->getScalpingSignal($klines15m, $symbol, '15m', $klines1h, $fearGreed, $lsRatio, $isTrending),
                     ];
                 }
                 elseif ($page === 'dashboard') {
@@ -78,9 +88,9 @@ class StreamController extends Controller
                     $klines1d  = $market->getKlines($symbol, '1d', 200);
 
                     $payload['predictions'] = [
-                        '15m' => $prediction->getScalpingSignal($klines15m, $klines1h, $fearGreed, $lsRatio, $isTrending),
-                        '1h'  => $prediction->getScalpingSignal($klines1h, $klines4h, $fearGreed, $lsRatio, $isTrending),
-                        '4h'  => $prediction->getScalpingSignal($klines4h, $klines1d, $fearGreed, $lsRatio, $isTrending),
+                        '15m' => $prediction->getScalpingSignal($klines15m, $symbol, '15m', $klines1h, $fearGreed, $lsRatio, $isTrending),
+                        '1h'  => $prediction->getScalpingSignal($klines1h,  $symbol, '1h',  $klines4h, $fearGreed, $lsRatio, $isTrending),
+                        '4h'  => $prediction->getScalpingSignal($klines4h,  $symbol, '4h',  $klines1d, $fearGreed, $lsRatio, $isTrending),
                     ];
                 }
 

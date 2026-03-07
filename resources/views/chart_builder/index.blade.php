@@ -7,8 +7,13 @@
 <div class="panel acrylic" style="height: calc(100vh - 120px); display: flex; flex-direction: column;">
     <div class="panel-header" style="justify-content: space-between; border-bottom: 1px solid var(--border);">
         <div style="display: flex; gap: var(--space-3); align-items: center;">
-            <div class="search-box">
-                <input type="text" id="add-symbol-input" placeholder="Add symbol (e.g. BTCUSDT, ETHUSDT)..." style="width: 250px;">
+            <a href="javascript:history.back()" class="btn btn-sm btn-ghost" style="padding: 0 8px; display: flex; align-items: center; justify-content: center;" title="Go Back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            </a>
+            <div class="search-box" style="position: relative;">
+                <input type="text" id="add-symbol-input" class="form-input" placeholder="Search symbol (e.g. BTC, AAPL)..." style="width: 280px; text-transform: uppercase;">
+                <div id="symbol-search-results" class="search-results-dropdown" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 4px; z-index: 100; max-height: 300px; overflow-y: auto; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);">
+                </div>
             </div>
             <button id="btn-add-symbol" class="btn btn-sm btn-primary">Add Overlay</button>
             <button id="btn-add-pane" class="btn btn-sm btn-ghost">Add New Pane</button>
@@ -18,6 +23,13 @@
                 <button class="btn btn-ghost btn-sm active btn-primary" data-tf="1h">1h</button>
                 <button class="btn btn-ghost btn-sm" data-tf="4h">4h</button>
                 <button class="btn btn-ghost btn-sm" data-tf="1d">1D</button>
+            </div>
+            
+            <div class="chart-indicators" id="builder-indicators" style="display:flex; gap:4px; margin-left: var(--space-4); border-left: 1px solid rgba(255,255,255,0.1); padding-left: var(--space-4);">
+                <button class="btn btn-ghost btn-sm" data-indicator="sma20">SMA 20</button>
+                <button class="btn btn-ghost btn-sm" data-indicator="sma50">SMA 50</button>
+                <button class="btn btn-ghost btn-sm" data-indicator="bb">Bollinger Bands</button>
+                <button class="btn btn-ghost btn-sm" data-indicator="volume">Volume Profile</button>
             </div>
         </div>
         <div>
@@ -60,6 +72,50 @@
     background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0; font-size: 0.8rem;
 }
 .symbol-badge button:hover { color: var(--danger); }
+
+/* Search Dropdown Styles */
+.form-input {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    outline: none;
+    font-family: var(--font-mono);
+}
+.form-input:focus {
+    border-color: var(--accent);
+}
+.search-result-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.search-result-item:hover {
+    background: rgba(255,255,255,0.1);
+}
+.search-result-item:last-child {
+    border-bottom: none;
+}
+.search-symbol {
+    font-weight: bold;
+    color: var(--accent);
+    font-family: var(--font-mono);
+}
+.search-desc {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.search-type {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    color: var(--text-secondary);
+}
 </style>
 @endsection
 
@@ -75,6 +131,10 @@ let colorIndex = 0;
 let chartInstance = null;
 let activeSeries = {}; // symbol -> { series, color, type, pane }
 
+let baseSymbolData = null;
+let activeIndicators = { sma20: false, sma50: false, bb: false, volume: false };
+let indicatorSeries = {};
+
 document.addEventListener('DOMContentLoaded', () => {
     initBuilderChart();
     
@@ -84,17 +144,77 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // UI Listeners
+    const searchInput = document.getElementById('add-symbol-input');
+    const searchResults = document.getElementById('symbol-search-results');
+    let searchTimeout = null;
+
+    searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const query = e.target.value.trim();
+        
+        if (query.length < 2) {
+            searchResults.style.display = 'none';
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                // Call the unified search endpoint
+                const res = await fetch(`/api/market/terminal?command=srch&query=${encodeURIComponent(query)}`);
+                if (!res.ok) throw new Error('Search failed');
+                const data = await res.json();
+                
+                if (data && data.data && data.data.length > 0) {
+                    searchResults.innerHTML = data.data.map(item => `
+                        <div class="search-result-item" data-symbol="${item.symbol}">
+                            <div>
+                                <div class="search-symbol">${item.symbol}</div>
+                                <div class="search-desc">${item.description || item.name || ''}</div>
+                            </div>
+                            <div class="search-type">${item.type || 'Crypto/Stock'}</div>
+                        </div>
+                    `).join('');
+                    searchResults.style.display = 'block';
+                    
+                    // Add click listeners to items
+                    document.querySelectorAll('.search-result-item').forEach(item => {
+                        item.addEventListener('click', () => {
+                            const symbol = item.dataset.symbol;
+                            searchInput.value = symbol;
+                            searchResults.style.display = 'none';
+                            addSymbolToChart(symbol);
+                        });
+                    });
+                } else {
+                    searchResults.innerHTML = '<div style="padding: 10px; color: var(--text-muted); text-align: center;">No results found</div>';
+                    searchResults.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+            }
+        }, 300); // 300ms debounce
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.style.display = 'none';
+        }
+    });
+
     document.getElementById('btn-add-symbol').addEventListener('click', () => {
-        const val = document.getElementById('add-symbol-input').value.trim().toUpperCase();
+        const val = searchInput.value.trim().toUpperCase();
         if (val) addSymbolToChart(val);
-        document.getElementById('add-symbol-input').value = '';
+        searchInput.value = '';
+        searchResults.style.display = 'none';
     });
     
-    document.getElementById('add-symbol-input').addEventListener('keydown', (e) => {
+    searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             const val = e.target.value.trim().toUpperCase();
             if (val) addSymbolToChart(val);
             e.target.value = '';
+            searchResults.style.display = 'none';
         }
     });
     
@@ -110,6 +230,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const symbols = Object.keys(activeSeries);
             symbols.forEach(s => removeSymbol(s, false)); // keep badges
             symbols.forEach(s => addSymbolToChart(s, true)); // reload data
+        });
+    });
+
+    // Indicator Toggle Listener
+    document.querySelectorAll('#builder-indicators button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const ind = e.target.dataset.indicator;
+            activeIndicators[ind] = !activeIndicators[ind];
+            
+            if (activeIndicators[ind]) {
+                e.target.classList.add('active', 'btn-primary');
+            } else {
+                e.target.classList.remove('active', 'btn-primary');
+            }
+            
+            if (baseSymbolData) {
+                renderIndicators();
+            }
         });
     });
     
@@ -170,6 +308,9 @@ async function addSymbolToChart(symbol, skipBadge = false) {
             });
             const cData = sortedData.map(k => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close }));
             series.setData(cData);
+            
+            baseSymbolData = sortedData;
+            renderIndicators();
         } else {
             // Subsequent symbols are Lines anchored to Percentage scale for direct comparative viewing!
             series = chartInstance.addLineSeries({
@@ -230,6 +371,109 @@ window.removeSymbol = function(symbol, removeBadge = true) {
                 mode: LightweightCharts.PriceScaleMode.Normal,
             });
         }
+        
+        // If the base symbol was removed
+        if (!activeSeries[symbol] && Object.keys(activeSeries).length === 0) {
+            baseSymbolData = null;
+            // Clear indicators visually when base is removed
+            for (let k in activeIndicators) activeIndicators[k] = false;
+            document.querySelectorAll('#builder-indicators button').forEach(btn => btn.classList.remove('active', 'btn-primary'));
+        }
+    }
+}
+
+// --- Technical Indicators Logic ---
+
+function calculateSMA(data, period) {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+        if (i < period - 1) continue;
+        let sum = 0;
+        for (let j = 0; j < period; j++) {
+            sum += data[i - j].close;
+        }
+        result.push({ time: data[i].time, value: sum / period });
+    }
+    return result;
+}
+
+function calculateBollinger(data, period, stdDevMultiplier) {
+    const basis = [];
+    const upper = [];
+    const lower = [];
+    
+    for (let i = 0; i < data.length; i++) {
+        if (i < period - 1) continue;
+        let sum = 0;
+        for (let j = 0; j < period; j++) {
+            sum += data[i - j].close;
+        }
+        const sma = sum / period;
+        
+        let varianceSum = 0;
+        for (let j = 0; j < period; j++) {
+            varianceSum += Math.pow(data[i - j].close - sma, 2);
+        }
+        const stdDev = Math.sqrt(varianceSum / period);
+        
+        basis.push({ time: data[i].time, value: sma });
+        upper.push({ time: data[i].time, value: sma + stdDevMultiplier * stdDev });
+        lower.push({ time: data[i].time, value: sma - stdDevMultiplier * stdDev });
+    }
+    return { basis, upper, lower };
+}
+
+function renderIndicators() {
+    if (!baseSymbolData || !chartInstance) return;
+    
+    // Clean up existing
+    if (indicatorSeries.sma20) { chartInstance.removeSeries(indicatorSeries.sma20); delete indicatorSeries.sma20; }
+    if (indicatorSeries.sma50) { chartInstance.removeSeries(indicatorSeries.sma50); delete indicatorSeries.sma50; }
+    if (indicatorSeries.bbUpper) { chartInstance.removeSeries(indicatorSeries.bbUpper); delete indicatorSeries.bbUpper; }
+    if (indicatorSeries.bbLower) { chartInstance.removeSeries(indicatorSeries.bbLower); delete indicatorSeries.bbLower; }
+    if (indicatorSeries.bbBasis) { chartInstance.removeSeries(indicatorSeries.bbBasis); delete indicatorSeries.bbBasis; }
+    if (indicatorSeries.volume) { chartInstance.removeSeries(indicatorSeries.volume); delete indicatorSeries.volume; }
+    
+    if (activeIndicators.sma20) {
+        indicatorSeries.sma20 = chartInstance.addLineSeries({ color: '#f59e0b', lineWidth: 1, title: 'SMA 20' });
+        indicatorSeries.sma20.setData(calculateSMA(baseSymbolData, 20));
+    }
+    
+    if (activeIndicators.sma50) {
+        indicatorSeries.sma50 = chartInstance.addLineSeries({ color: '#3b82f6', lineWidth: 2, title: 'SMA 50' });
+        indicatorSeries.sma50.setData(calculateSMA(baseSymbolData, 50));
+    }
+    
+    if (activeIndicators.bb) {
+        const bb = calculateBollinger(baseSymbolData, 20, 2);
+        
+        indicatorSeries.bbUpper = chartInstance.addLineSeries({ color: '#10b981', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'BB Upper' });
+        indicatorSeries.bbUpper.setData(bb.upper);
+        
+        indicatorSeries.bbBasis = chartInstance.addLineSeries({ color: '#f59e0b', lineWidth: 1, title: 'BB Basis' });
+        indicatorSeries.bbBasis.setData(bb.basis);
+        
+        indicatorSeries.bbLower = chartInstance.addLineSeries({ color: '#ef4444', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, title: 'BB Lower' });
+        indicatorSeries.bbLower.setData(bb.lower);
+    }
+    
+    if (activeIndicators.volume) {
+        indicatorSeries.volume = chartInstance.addHistogramSeries({
+            color: '#26a69a',
+            priceFormat: { type: 'volume' },
+            priceScaleId: '', // set as an overlay
+            scaleMargins: {
+                top: 0.85, 
+                bottom: 0,
+            },
+        });
+        
+        const vData = baseSymbolData.map(k => {
+            const vol = parseFloat(k.volume) || 0;
+            const color = k.close >= k.open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+            return { time: k.time, value: vol, color: color };
+        });
+        indicatorSeries.volume.setData(vData);
     }
 }
 </script>

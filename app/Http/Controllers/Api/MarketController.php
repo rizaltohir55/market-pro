@@ -65,7 +65,7 @@ class MarketController extends Controller
         $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval = $request->get('interval', '15m');
         $klines   = $market->getKlines($symbol, $interval, 200);
-        $signal   = $prediction->getScalpingSignal($klines);
+        $signal   = $prediction->getScalpingSignal($klines, $symbol, $interval);
         return response()->json($signal);
     }
 
@@ -87,7 +87,7 @@ class MarketController extends Controller
             
             $results[$symbol] = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function() use ($market, $prediction, $symbol, $interval) {
                 $klines = $market->getKlines($symbol, $interval, 200);
-                return $prediction->getScalpingSignal($klines);
+                return $prediction->getScalpingSignal($klines, $symbol, $interval);
             });
         }
 
@@ -307,11 +307,10 @@ class MarketController extends Controller
                     return response()->json(['type' => 'anr', 'data' => $anr]);
 
                 case 'crpr':
-                    // Credit/Health Rating (using Valuation as proxy)
+                    // Quantitative Fundamental Rating based on Real-time Ratios
                     if (!$query) return response()->json(['error' => 'Symbol required'], 400);
                     $val = $stockMarket->getEquityValuation($query);
                     
-                    // Synthesize a dummy "Score" for demo purposes based on real metrics
                     $score = 'BB';
                     $outlook = 'Stable';
                     if (!empty($val['ratios'])) {
@@ -328,7 +327,15 @@ class MarketController extends Controller
                         $outlook = $pts > 3 ? 'Positive' : ($pts < 2 ? 'Negative' : 'Stable');
                     }
 
-                    return response()->json(['type' => 'crpr', 'data' => ['valuation' => $val, 'synthetic_rating' => $score, 'outlook' => $outlook]]);
+                    return response()->json([
+                        'type' => 'crpr', 
+                        'data' => [
+                            'valuation' => $val, 
+                            'fundamental_score' => $score, 
+                            'outlook' => $outlook,
+                            'methodology' => 'Quantitative Ratio Analysis'
+                        ]
+                    ]);
 
                 default:
                     return response()->json(['error' => 'Unknown command'], 400);

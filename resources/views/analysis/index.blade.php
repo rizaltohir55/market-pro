@@ -43,116 +43,163 @@
     @endforeach
 </div>
 
-<div class="grid-2" style="align-items:start">
-    {{-- Indicator Breakdown —  15m --}}
-    <div class="panel">
-        <div class="panel-header">
-            <span class="panel-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                Indicator Breakdown (15m)
-            </span>
-        </div>
-        <div class="panel-body no-padding">
-            <div class="indicator-list" id="indicator-list-15m">
-                @foreach($signal15m['indicators'] as $ind)
-                <div class="indicator-row">
-                    <span class="indicator-name">{{ $ind['name'] }}</span>
-                    @php
-                        $sc = in_array($ind['signal'], ['BUY','BULLISH']) ? 'text-success' :
-                               (in_array($ind['signal'], ['SELL','BEARISH']) ? 'text-danger' : 'text-muted');
-                        $bc = in_array($ind['signal'], ['BUY','BULLISH']) ? 'buy' :
-                               (in_array($ind['signal'], ['SELL','BEARISH']) ? 'sell' : 'neutral');
-                    @endphp
-                    <span class="indicator-value {{$sc}}">{{ $ind['value'] }}</span>
-                    <span class="badge badge-{{$bc}}">{{ $ind['signal'] }}</span>
+<div class="analysis-layout-grid" style="display: grid; grid-template-columns: 1fr 340px; gap: var(--space-4); margin-top: var(--space-4); align-items: start;">
+    {{-- Main Analysis Column --}}
+    <div class="analysis-main-col" style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <div class="grid-2" style="align-items:start">
+            {{-- Indicator Breakdown —  15m --}}
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        Indicator Breakdown (15m)
+                    </span>
                 </div>
-                @endforeach
-            </div>
-        </div>
-    </div>
-
-    {{-- Support & Resistance --}}
-    <div class="panel">
-        <div class="panel-header">
-            <span class="panel-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="2"><path d="M21 3L3 21"/><path d="M21 21L3 3"/></svg>
-                Support & Resistance Levels
-            </span>
-        </div>
-        <div class="panel-body">
-            <div style="display:flex;flex-direction:column;gap:var(--space-3)">
-                @if(!empty($sr['resistance']))
-                <div>
-                    <div class="text-caption" style="margin-bottom:var(--space-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;color:var(--danger)">Resistance</div>
-                    @foreach($sr['resistance'] as $level)
-                    <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-1) var(--space-3);font-family:var(--font-mono);font-size:0.875rem">
-                        <span class="text-danger">${{ number_format($level, 2) }}</span>
-                        @php $dist = $signal15m['price'] ?? 0 ? (($level - ($signal15m['price'] ?? 0)) / ($signal15m['price'] ?? 1)) * 100 : 0; @endphp
-                        <span class="text-muted">{{ $dist >= 0 ? '+' : '' }}{{ number_format($dist, 2) }}%</span>
+                <div class="panel-body no-padding">
+                    <div class="indicator-list" id="indicator-list-15m">
+                        @foreach($signal15m['indicators'] as $ind)
+                        <div class="indicator-row">
+                            <span class="indicator-name">{{ $ind['name'] }}</span>
+                            @php
+                                $sc = in_array($ind['signal'], ['BUY','BULLISH']) ? 'text-success' :
+                                       (in_array($ind['signal'], ['SELL','BEARISH']) ? 'text-danger' : 'text-muted');
+                                $bc = in_array($ind['signal'], ['BUY','BULLISH']) ? 'buy' :
+                                       (in_array($ind['signal'], ['SELL','BEARISH']) ? 'sell' : 'neutral');
+                            @endphp
+                            <span class="indicator-value {{$sc}}">{{ $ind['value'] }}</span>
+                            <span class="badge badge-{{$bc}}">{{ $ind['signal'] }}</span>
+                        </div>
+                        @endforeach
                     </div>
-                    @endforeach
                 </div>
-                @endif
+            </div>
+
+            {{-- Support & Resistance --}}
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="2"><path d="M21 3L3 21"/><path d="M21 21L3 3"/></svg>
+                        Support & Resistance levels
+                    </span>
+                </div>
+                <div class="panel-body">
+                    <div style="display:flex;flex-direction:column;gap:var(--space-3)">
+                        @if(!empty($sr['resistance']))
+                        <div>
+                            <div class="text-caption" style="margin-bottom:var(--space-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;color:var(--danger)">Resistance</div>
+                            @foreach($sr['resistance'] as $level)
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-1) var(--space-3);font-family:var(--font-mono);font-size:0.875rem">
+                                <span class="text-danger">${{ number_format($level, 2) }}</span>
+                                @php $dist = $signal15m['price'] ?? 0 ? (($level - ($signal15m['price'] ?? 0)) / ($signal15m['price'] ?? 1)) * 100 : 0; @endphp
+                                <span class="text-muted">{{ $dist >= 0 ? '+' : '' }}{{ number_format($dist, 2) }}%</span>
+                            </div>
+                            @endforeach
+                        </div>
+                        @endif
 
 
-                @if(!empty($sr['support']))
-                <div>
-                    <div class="text-caption" style="margin-bottom:var(--space-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;color:var(--success)">Support</div>
-                    @foreach($sr['support'] as $level)
-                    <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-1) var(--space-3);font-family:var(--font-mono);font-size:0.875rem">
-                        <span class="text-success">${{ number_format($level, 2) }}</span>
-                        @php $dist = $signal15m['price'] ?? 0 ? (($level - ($signal15m['price'] ?? 0)) / ($signal15m['price'] ?? 1)) * 100 : 0; @endphp
-                        <span class="text-muted">{{ number_format($dist, 2) }}%</span>
+                        @if(!empty($sr['support']))
+                        <div>
+                            <div class="text-caption" style="margin-bottom:var(--space-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;color:var(--success)">Support</div>
+                            @foreach($sr['support'] as $level)
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-1) var(--space-3);font-family:var(--font-mono);font-size:0.875rem">
+                                <span class="text-success">${{ number_format($level, 2) }}</span>
+                                @php $dist = $signal15m['price'] ?? 0 ? (($level - ($signal15m['price'] ?? 0)) / ($signal15m['price'] ?? 1)) * 100 : 0; @endphp
+                                <span class="text-muted">{{ number_format($dist, 2) }}%</span>
+                            </div>
+                            @endforeach
+                        </div>
+                        @endif
                     </div>
-                    @endforeach
                 </div>
-                @endif
+            </div>
+        </div>
 
-                @if(empty($sr['support']) && empty($sr['resistance']))
-                <div class="empty-state">
-                    <div class="empty-state-icon">📊</div>
-                    <div class="empty-state-title">No clear S/R levels found</div>
-                    <div class="empty-state-desc">Try a longer timeframe for more data points</div>
+        {{-- Analysis Summary --}}
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Analysis Summary
+                </span>
+            </div>
+            <div class="panel-body">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-4)">
+                    <div>
+                        <div class="text-caption" style="margin-bottom:var(--space-2)">15 Minute</div>
+                        <p id="summary-15m" style="font-size:0.875rem;color:var(--text-secondary)">{{ $signal15m['summary'] }}</p>
+                    </div>
+                    <div>
+                        <div class="text-caption" style="margin-bottom:var(--space-2)">1 Hour</div>
+                        <p id="summary-1h" style="font-size:0.875rem;color:var(--text-secondary)">{{ $signal1h['summary'] }}</p>
+                    </div>
+                    <div>
+                        <div class="text-caption" style="margin-bottom:var(--space-2)">4 Hour</div>
+                        <p id="summary-4h" style="font-size:0.875rem;color:var(--text-secondary)">{{ $signal4h['summary'] }}</p>
+                    </div>
                 </div>
-                @endif
+            </div>
+        </div>
+
+        {{-- Chart for this symbol --}}
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Price Chart (15m)</span>
+            </div>
+            <div class="chart-container" id="analysis-chart" style="height:350px"></div>
+        </div>
+    </div>
+
+    {{-- Live TV Sidebar Module --}}
+    <div class="analysis-sidebar-col" style="display: flex; flex-direction: column; gap: var(--space-4);">
+        <div class="panel acrylic fade-in-up" style="--delay: 0.2s; position: sticky; top: var(--space-4);">
+            <div class="panel-header">
+                <span class="panel-title" style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" style="filter: drop-shadow(0 0 5px var(--danger))"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33 2.78 2.78 0 0 0 1.94 2c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.33 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+                    Live Financial News
+                </span>
+                <div class="panel-actions">
+                    <span class="live-indicator" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.70rem; color: var(--danger); font-weight: 700; text-transform: uppercase; animation: pulse 2s infinite;"><div style="width: 6px; height: 6px; border-radius: 50%; background: var(--danger);"></div> LIVE</span>
+                </div>
+            </div>
+            <div class="panel-body no-padding" style="display: flex; flex-direction: column;">
+                <div style="padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
+                    <select id="live-tv-channel-analysis" class="form-control" style="width: 100%; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.85rem; background-color: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; cursor: pointer; appearance: auto;" onchange="changeLiveTvChannelAnalysis()">
+                        <option value="iEpJwprxDdk">Bloomberg Television</option>
+                        <option value="KQp-e_XQnDE">Yahoo Finance</option>
+                        <option value="XWq5kBlakcQ">CNA</option>
+                        <option value="LuKwFajn37U">DW News</option>
+                    </select>
+                </div>
+                <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; background: #0b0b0f; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg);">
+                    <iframe id="live-tv-iframe-analysis" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" src="https://www.youtube.com/embed/iEpJwprxDdk?autoplay=1&mute=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-{{-- Analysis Summary --}}
-<div class="panel">
-    <div class="panel-header">
-        <span class="panel-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            Analysis Summary
-        </span>
-    </div>
-    <div class="panel-body">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-4)">
-            <div>
-                <div class="text-caption" style="margin-bottom:var(--space-2)">15 Minute</div>
-                <p id="summary-15m" style="font-size:0.875rem;color:var(--text-secondary)">{{ $signal15m['summary'] }}</p>
-            </div>
-            <div>
-                <div class="text-caption" style="margin-bottom:var(--space-2)">1 Hour</div>
-                <p id="summary-1h" style="font-size:0.875rem;color:var(--text-secondary)">{{ $signal1h['summary'] }}</p>
-            </div>
-            <div>
-                <div class="text-caption" style="margin-bottom:var(--space-2)">4 Hour</div>
-                <p id="summary-4h" style="font-size:0.875rem;color:var(--text-secondary)">{{ $signal4h['summary'] }}</p>
-            </div>
-        </div>
-    </div>
-</div>
+<script>
+    function changeLiveTvChannelAnalysis() {
+        var videoId = document.getElementById('live-tv-channel-analysis').value;
+        var iframe = document.getElementById('live-tv-iframe-analysis');
+        iframe.src = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&mute=1";
+    }
+</script>
 
-{{-- Chart for this symbol --}}
-<div class="panel">
-    <div class="panel-header">
-        <span class="panel-title">Price Chart (15m)</span>
-    </div>
-    <div class="chart-container" id="analysis-chart" style="height:350px"></div>
-</div>
+<style>
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.4; }
+        100% { opacity: 1; }
+    }
+    
+    @media (max-width: 1100px) {
+        .analysis-layout-grid {
+            grid-template-columns: 1fr !important;
+        }
+    }
+</style>
 @endsection
 
 @section('scripts')

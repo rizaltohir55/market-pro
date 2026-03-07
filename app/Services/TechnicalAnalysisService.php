@@ -142,7 +142,6 @@ class TechnicalAnalysisService
             }
         }
 
-        // Keep only the most recent and relevant levels
         $levels['resistance'] = array_unique(array_slice(array_reverse($levels['resistance']), 0, 5));
         $levels['support'] = array_unique(array_slice(array_reverse($levels['support']), 0, 5));
 
@@ -166,7 +165,6 @@ class TechnicalAnalysisService
             $trueRanges[] = max($high - $low, abs($high - $prevClose), abs($low - $prevClose));
         }
 
-        // First ATR is simple average
         $atr[] = array_sum(array_slice($trueRanges, 0, $period)) / $period;
 
         for ($i = $period; $i < count($trueRanges); $i++) {
@@ -460,6 +458,492 @@ class TechnicalAnalysisService
             's2' => $pivot - ($high - $low),
             'r3' => $high + 2 * ($pivot - $low),
             's3' => $low - 2 * ($high - $pivot),
+        ];
+    }
+
+    /**
+     * Detect Volume Spike Anomaly.
+     */
+    public function detectVolumeSpike(array $klines, int $period = 20, float $multiplier = 2.5): string
+    {
+        if (count($klines) < $period + 1) return 'NEUTRAL';
+
+        $recentKlines = array_slice($klines, -$period - 1);
+        $currentKline = array_pop($recentKlines);
+        $currentVolume = $currentKline['volume'];
+        
+        $volumes = array_column($recentKlines, 'volume');
+        $avgVolume = array_sum($volumes) / count($volumes);
+
+        if ($currentVolume > ($avgVolume * $multiplier)) {
+            $isBullishCandle = $currentKline['close'] > $currentKline['open'];
+            return $isBullishCandle ? 'BULLISH_SPIKE' : 'BEARISH_SPIKE';
+        }
+
+        return 'NEUTRAL';
+    }
+
+    /**
+     * Detect Bullish/Bearish Divergence between Price and Oscillator.
+     */
+    public function detectDivergence(array $closes, array $oscillatorValues, int $lookback = 10): string
+    {
+        if (count($closes) < $lookback || count($oscillatorValues) < $lookback) return 'NEUTRAL';
+
+        $recentCloses = array_slice($closes, -$lookback);
+        $recentOsc = array_slice($oscillatorValues, -$lookback);
+
+        $priceLowIdx = array_keys($recentCloses, min($recentCloses))[0];
+        $priceHighIdx = array_keys($recentCloses, max($recentCloses))[0];
+
+        $oscLowIdx = array_keys($recentOsc, min($recentOsc))[0];
+        $oscHighIdx = array_keys($recentOsc, max($recentOsc))[0];
+
+        // Bullish Divergence: Price Lower Low, Oscillator Higher Low
+        if ($recentCloses[$lookback-1] < $recentCloses[0] && $recentOsc[$lookback-1] > $recentOsc[0]) {
+            return 'BULLISH_DIVERGENCE';
+        }
+
+        // Bearish Divergence: Price Higher High, Oscillator Lower High
+        if ($recentCloses[$lookback-1] > $recentCloses[0] && $recentOsc[$lookback-1] < $recentOsc[0]) {
+            return 'BEARISH_DIVERGENCE';
+        }
+
+        return 'NEUTRAL';
+    }
+
+    /**
+     * Detect Candlestick Patterns (Engulfing, Hammer, Shooting Star).
+     */
+    public function detectCandlestickPatterns(array $klines): array
+    {
+        $patterns = [];
+        if (count($klines) < 2) return $patterns;
+
+        $current = end($klines);
+        $previous = $klines[count($klines) - 2];
+
+        $currOpen = $current['open']; $currClose = $current['close']; $currHigh = $current['high']; $currLow = $current['low'];
+        $prevOpen = $previous['open']; $prevClose = $previous['close'];
+
+        // 1. Engulfing
+        if ($currClose > $currOpen && $prevClose < $prevOpen && $currClose > $prevOpen && $currOpen < $prevClose) {
+            $patterns[] = 'BULLISH_ENGULFING';
+        } elseif ($currClose < $currOpen && $prevClose > $prevOpen && $currClose < $prevOpen && $currOpen > $prevClose) {
+            $patterns[] = 'BEARISH_ENGULFING';
+        }
+
+        // 2. Hammer / Shooting Star
+        $bodySize = abs($currClose - $currOpen);
+        $candleHeight = $currHigh - $currLow;
+        if ($candleHeight > 0) {
+            $upperShadow = $currHigh - max($currOpen, $currClose);
+            $lowerShadow = min($currOpen, $currClose) - $currLow;
+
+            // Hammer: Small body, long lower shadow
+            if ($lowerShadow > (2 * $bodySize) && $upperShadow < (0.2 * $candleHeight)) {
+                $patterns[] = 'HAMMER';
+            }
+            // Shooting Star: Small body, long upper shadow
+            if ($upperShadow > (2 * $bodySize) && $lowerShadow < (0.2 * $candleHeight)) {
+                $patterns[] = 'SHOOTING_STAR';
+            }
+        }
+
+        return $patterns;
+    }
+
+    /**
+     * Calculate Fibonacci Pivot Points.
+     */
+    public function calculateFibonacciPivots(array $klines): array
+    {
+        if (count($klines) < 2) return [];
+
+        $historical = array_slice($klines, 0, -1);
+        $high = max(array_column($historical, 'high'));
+        $low = min(array_column($historical, 'low'));
+        $close = end($historical)['close'];
+
+        $pivot = ($high + $low + $close) / 3;
+        $range = $high - $low;
+
+        return [
+            'pivot' => $pivot,
+            'r1' => $pivot + (0.382 * $range),
+            's1' => $pivot - (0.382 * $range),
+            'r2' => $pivot + (0.618 * $range),
+            's2' => $pivot - (0.618 * $range),
+            'r3' => $pivot + (1.000 * $range),
+            's3' => $pivot - (1.000 * $range),
+        ];
+    }
+
+    /**
+     * Calculate Hurst Exponent to determine if series is trending, mean-reverting, or random walk.
+     * H < 0.5: Mean-reverting (Anti-persistent)
+     * H = 0.5: Random Walk (Brownian Motion)
+     * H > 0.5: Trending (Persistent)
+     */
+    public function calculateHurstExponent(array $closes, int $minWindow = 8): float
+    {
+        $n = count($closes);
+        if ($n < 32) return 0.5; // Not enough data for reliable Hurst
+
+        $maxWindow = floor($n / 2);
+        $rsValues = [];
+        $windows = [];
+
+        // Simple R/S analysis
+        for ($w = $minWindow; $w <= $maxWindow; $w *= 2) {
+            $numSubsets = floor($n / $w);
+            $subsetRS = [];
+            
+            for ($s = 0; $s < $numSubsets; $s++) {
+                $slice = array_slice($closes, $s * $w, $w);
+                $mean = array_sum($slice) / $w;
+                
+                // Mean centered
+                $y = array_map(fn($val) => $val - $mean, $slice);
+                
+                // Cumulative deviation
+                $z = [0];
+                foreach ($y as $val) $z[] = end($z) + $val;
+                
+                $range = max($z) - min($z);
+                
+                // Standard deviation
+                $variance = array_sum(array_map(fn($val) => pow($val - $mean, 2), $slice)) / $w;
+                $sd = sqrt($variance);
+                
+                if ($sd > 0) {
+                    $subsetRS[] = $range / $sd;
+                }
+            }
+            
+            if (!empty($subsetRS)) {
+                $rsValues[] = log(array_sum($subsetRS) / count($subsetRS));
+                $windows[] = log($w);
+            }
+        }
+
+        if (count($windows) < 2) return 0.5;
+
+        // Linear regression on log(RS) vs log(Window)
+        $nPoints = count($windows);
+        $sumX = array_sum($windows);
+        $sumY = array_sum($rsValues);
+        $sumXY = 0;
+        $sumXX = 0;
+        for ($i = 0; $i < $nPoints; $i++) {
+            $sumXY += $windows[$i] * $rsValues[$i];
+            $sumXX += $windows[$i] * $windows[$i];
+        }
+
+        $slope = ($nPoints * $sumXY - $sumX * $sumY) / ($nPoints * $sumXX - $sumX * $sumX);
+        return $slope;
+    }
+
+    /**
+     * Calculate Fractal Dimension (Efficiency Index variant) to measure market complexity.
+     */
+    public function calculateFractalDimension(array $closes, int $period = 30): float
+    {
+        if (count($closes) < $period) return 1.5;
+
+        $slice = array_slice($closes, -$period);
+        $totalPath = 0;
+        for ($i = 1; $i < count($slice); $i++) {
+            $totalPath += abs($slice[$i] - $slice[$i - 1]);
+        }
+
+        $range = max($slice) - min($slice);
+        
+        if ($totalPath == 0) return 1.0;
+        
+        // Fractal dimension formula approximation
+        $efficiencyIndex = $range / $totalPath;
+        // Map EI to Dimension (Simplified)
+        return 2.0 - $efficiencyIndex;
+    }
+
+    /**
+     * Apply Z-Score normalization to a series.
+     */
+    public function applyZScore(array $values, int $period = 20): array
+    {
+        $zscores = [];
+        if (count($values) < $period) return $zscores;
+
+        for ($i = $period - 1; $i < count($values); $i++) {
+            $slice = array_slice($values, $i - $period + 1, $period);
+            $mean = array_sum($slice) / $period;
+            $variance = array_sum(array_map(fn($v) => pow($v - $mean, 2), $slice)) / $period;
+            $sd = sqrt($variance);
+            
+            $zscores[] = ($sd == 0) ? 0 : ($values[$i] - $mean) / $sd;
+        }
+
+        return $zscores;
+    }
+
+    /**
+     * Calculate Chandelier Exit for volatility-based trail.
+     */
+    public function calculateChandelierExit(array $klines, int $period = 22, float $multiplier = 3.0): array
+    {
+        $atrHist = $this->calculateATR($klines, $period);
+        if (empty($atrHist)) return ['long' => [], 'short' => []];
+
+        $exits = ['long' => [], 'short' => []];
+        $offset = count($klines) - count($atrHist);
+
+        for ($i = 0; $i < count($atrHist); $i++) {
+            $currentKlines = array_slice($klines, $i + $offset - $period + 1, $period);
+            if (empty($currentKlines)) continue;
+
+            $highestHigh = max(array_column($currentKlines, 'high'));
+            $lowestLow = min(array_column($currentKlines, 'low'));
+            $currentAtr = $atrHist[$i];
+
+            $exits['long'][] = $highestHigh - ($currentAtr * $multiplier);
+            $exits['short'][] = $lowestLow + ($currentAtr * $multiplier);
+        }
+
+        return $exits;
+    }
+
+    /**
+     * 1D Kalman Filter for price denoising.
+     */
+    public function calculateKalmanFilter(array $values): array
+    {
+        if (empty($values)) return [];
+
+        $kalman = [];
+        $q = 0.01; // Process noise
+        $r = 0.1;  // Measurement noise
+        $x = $values[0]; // Initial state
+        $p = 1.0;  // Initial error covariance
+
+        foreach ($values as $val) {
+            // Prediction
+            $p = $p + $q;
+            
+            // Measurement update (Kalman Gain)
+            $k = $p / ($p + $r);
+            $x = $x + $k * ($val - $x);
+            $p = (1 - $k) * $p;
+            
+            $kalman[] = $x;
+        }
+
+        return $kalman;
+    }
+
+    /**
+     * SuperTrend Indicator.
+     */
+    public function calculateSuperTrend(array $klines, int $period = 10, float $multiplier = 3.0): array
+    {
+        $atrHist = $this->calculateATR($klines, $period);
+        if (count($klines) < $period + 1) return [];
+
+        $results = [];
+        $offset = count($klines) - count($atrHist);
+        
+        $upperBandArr = [];
+        $lowerBandArr = [];
+        $trend = []; // 1 for Long, -1 for Short
+
+        for ($i = 0; $i < count($atrHist); $i++) {
+            // Index in original klines
+            $idx = $i + $offset;
+            $currentAtr = $atrHist[$i];
+            $hl2 = ($klines[$idx]['high'] + $klines[$idx]['low']) / 2;
+
+            $upperBand = $hl2 + ($multiplier * $currentAtr);
+            $lowerBand = $hl2 - ($multiplier * $currentAtr);
+
+            // Final Bands logic
+            if ($i > 0) {
+                $prevUpper = $upperBandArr[$i-1];
+                $prevLower = $lowerBandArr[$i-1];
+                $prevClose = $klines[$idx-1]['close'];
+
+                if ($upperBand < $prevUpper || $prevClose > $prevUpper) {
+                    // Stay or lower the upper band
+                } else {
+                    $upperBand = $prevUpper;
+                }
+
+                if ($lowerBand > $prevLower || $prevClose < $prevLower) {
+                    // Stay or raise the lower band
+                } else {
+                    $lowerBand = $prevLower;
+                }
+            }
+
+            $upperBandArr[] = $upperBand;
+            $lowerBandArr[] = $lowerBand;
+
+            // Trend determination
+            if ($i == 0) {
+                $trend[] = 1;
+            } else {
+                $prevTrend = $trend[$i-1];
+                if ($prevTrend == 1 && $klines[$idx]['close'] < $lowerBandArr[$i]) {
+                    $trend[] = -1;
+                } elseif ($prevTrend == -1 && $klines[$idx]['close'] > $upperBandArr[$i]) {
+                    $trend[] = 1;
+                } else {
+                    $trend[] = $prevTrend;
+                }
+            }
+
+            $currentTrend = end($trend);
+            $results[] = [
+                'time' => $klines[$idx]['time'],
+                'value' => ($currentTrend == 1) ? $lowerBand : $upperBand,
+                'trend' => $currentTrend
+            ];
+        }
+
+        return $results;
+    }
+
+    /**
+     * Keltner Channels (EMA-based bands).
+     */
+    public function calculateKeltnerChannels(array $klines, int $period = 20, float $multiplier = 1.5): array
+    {
+        $closes = array_column($klines, 'close');
+        $ema = $this->calculateEMA($closes, $period);
+        $atrHist = $this->calculateATR($klines, $period);
+
+        if (empty($ema) || empty($atrHist)) return ['upper' => [], 'middle' => [], 'lower' => []];
+
+        $results = ['upper' => [], 'middle' => [], 'lower' => []];
+        $emaOffset = count($closes) - count($ema);
+        $atrOffset = count($klines) - count($atrHist);
+
+        for ($i = 0; $i < count($atrHist); $i++) {
+            $eVal = $ema[$i + ($atrOffset - $emaOffset)];
+            $aVal = $atrHist[$i];
+
+            $results['upper'][]  = $eVal + ($multiplier * $aVal);
+            $results['middle'][] = $eVal;
+            $results['lower'][]  = $eVal - ($multiplier * $aVal);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Squeeze Momentum Indicator (TTM Squeeze style).
+     * Returns an array of objects indicating if the market is in a squeeze.
+     */
+    public function calculateSqueezeMomentum(array $klines): array
+    {
+        $closes = array_column($klines, 'close');
+        if (count($closes) < 20) return [];
+
+        $bb = $this->calculateBollingerBands($closes, 20, 2.0);
+        $kc = $this->calculateKeltnerChannels($klines, 20, 1.5);
+
+        if (empty($bb['upper']) || empty($kc['upper'])) return [];
+
+        $results = [];
+        $bbOffset = count($closes) - count($bb['upper']);
+        $kcOffset = count($klines) - count($kc['upper']);
+        
+        // Aligning results to the shortest series
+        $len = min(count($bb['upper']), count($kc['upper']));
+        
+        for ($i = 0; $i < $len; $i++) {
+            $bbUpper = $bb['upper'][$i + (count($bb['upper']) - $len)];
+            $bbLower = $bb['lower'][$i + (count($bb['lower']) - $len)];
+            $kcUpper = $kc['upper'][$i + (count($kc['upper']) - $len)];
+            $kcLower = $kc['lower'][$i + (count($kc['lower']) - $len)];
+            
+            // Squeeze is ON when Bollinger Bands are inside Keltner Channels
+            $isSqueeze = ($bbUpper < $kcUpper) && ($bbLower > $kcLower);
+            
+            // Momentum: Linear regression slope of (Price - HL2/EMA Pivot)
+            // Simplified here: Distance from middle band
+            $momentum = $closes[count($closes) - $len + $i] - $bb['middle'][$i + (count($bb['middle']) - $len)];
+            
+            $results[] = [
+                'is_squeeze' => $isSqueeze,
+                'momentum'   => $momentum,
+                'direction'  => $momentum > 0 ? 1 : -1
+            ];
+        }
+
+        return $results;
+    }
+
+    /**
+     * Calculate ATR-based Trailing Stop.
+     */
+    public function calculateTrailingStopATR(array $klines, string $side = 'BUY', float $multiplier = 2.0): float
+    {
+        $atrArr = $this->calculateATR($klines, 14);
+        if (empty($atrArr)) return 0;
+
+        $atr = end($atrArr);
+        $lastClose = end($klines)['close'];
+
+        if (strtoupper($side) === 'BUY') {
+            return $lastClose - ($atr * $multiplier);
+        } else {
+            return $lastClose + ($atr * $multiplier);
+        }
+    }
+
+    /**
+     * Calculate Dynamic High-Accuracy Take Profit and Stop Loss levels.
+     * Uses ATR for volatility and Fibonacci Pivots for structural alignment.
+     */
+    public function calculateDynamicTPBL(array $klines, string $side = 'BUY'): array
+    {
+        $lastClose = end($klines)['close'];
+        $atrHist = $this->calculateATR($klines, 14);
+        $atr = !empty($atrHist) ? end($atrHist) : ($lastClose * 0.015);
+        $pivots = $this->calculateFibonacciPivots($klines);
+
+        if (empty($pivots)) {
+            // Fallback to basic ATR multipliers if pivots fail
+            $tp = $lastClose + ($side === 'BUY' ? 2 * $atr : -2 * $atr);
+            $sl = $lastClose + ($side === 'BUY' ? -1.5 * $atr : 1.5 * $atr);
+            return ['tp' => $tp, 'sl' => $sl, 'method' => 'ATR_ONLY'];
+        }
+
+        if (strtoupper($side) === 'BUY') {
+            // SL: Ideally just below S1, or 1.5*ATR if price is far from S1
+            $sl = min($lastClose - (1.2 * $atr), $pivots['s1'] * 0.998);
+            // TP: Ideally at R1 or R2
+            $tp = max($lastClose + (2.0 * $atr), $pivots['r1']);
+            // If R1 is too close (RR < 1), target R2
+            if (($tp - $lastClose) < ($lastClose - $sl)) {
+                $tp = $pivots['r2'];
+            }
+        } else {
+            // SL: Ideally just above R1
+            $sl = max($lastClose + (1.2 * $atr), $pivots['r1'] * 1.002);
+            // TP: Ideally at S1 or S2
+            $tp = min($lastClose - (2.0 * $atr), $pivots['s1']);
+            if (($lastClose - $tp) < ($sl - $lastClose)) {
+                $tp = $pivots['s2'];
+            }
+        }
+
+        return [
+            'tp' => round($tp, 6),
+            'sl' => round($sl, 6),
+            'pivots' => $pivots,
+            'atr' => round($atr, 6),
+            'method' => 'DYNAMIC_STRUCTURAL'
         ];
     }
 }
