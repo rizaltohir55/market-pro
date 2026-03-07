@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\Pool;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -64,23 +65,32 @@ class MultiSourceMarketService
         $cacert = storage_path('cacert.pem');
         $verify = file_exists($cacert) ? $cacert : true;
 
-        foreach ($this->binanceEndpoints as $base) {
-            try {
-                $r = Http::withOptions([
-                        'verify' => $verify,
-                    ])
-                    ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
-                    ->timeout(6)
-                    ->get($base . '/api/v3/ping');
+        try {
+            // Ping all endpoints in parallel to find the fastest responder
+            // Total maximum delay is now 2 seconds instead of N * timeout
+            $responses = Http::pool(function (Pool $pool) use ($verify) {
+                $reqs = [];
+                foreach ($this->binanceEndpoints as $base) {
+                    $reqs[] = $pool->as($base)
+                        ->withOptions(['verify' => $verify])
+                        ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
+                        ->timeout(2)
+                        ->get($base . '/api/v3/ping');
+                }
+                return $reqs;
+            });
 
-                if ($r->successful()) {
-                    Log::info('MarketService: Working Binance endpoint found and cached: ' . $base);
+            // Iterate in preference order
+            foreach ($this->binanceEndpoints as $base) {
+                $r = $responses[$base] ?? null;
+                if ($r instanceof \Illuminate\Http\Client\Response && $r->successful()) {
+                    Log::info('MarketService: Working Binance endpoint found (via pool) and cached: ' . $base);
                     Cache::put($cacheKey, $base, 300);
                     return $base;
                 }
-            } catch (\Exception $e) {
-                // try next
             }
+        } catch (\Exception $e) {
+            Log::warning('MarketService: Binance pool ping exception: ' . $e->getMessage());
         }
 
         Log::warning('MarketService: No Binance endpoint reachable. Returning fallback without caching.');

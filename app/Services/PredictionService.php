@@ -15,9 +15,6 @@ class PredictionService
         $this->ml = $ml;
     }
 
-    /**
-     * Get composite scalping signal with caching and confluence.
-     */
     public function getScalpingSignal(array $klines, string $symbol = 'UNKNOWN', string $interval = '15m', array $htfKlines = [], int $fearGreed = 50, float $lsRatio = 1.0, bool $isTrending = false): array
     {
         $symbol = strtoupper($symbol);
@@ -28,7 +25,56 @@ class PredictionService
         });
     }
 
-    private function calculateSignal(array $klines, string $symbol, string $interval, array $htfKlines, int $fearGreed, float $lsRatio, bool $isTrending): array
+    /**
+     * Get batch scalping signals with optimized ML execution.
+     */
+    public function getBatchSignals(array $symbolData, string $interval = '15m'): array
+    {
+        $batchResults = [];
+        $mlBatchInput = [];
+        
+        // 1. Prepare data and check cache
+        foreach ($symbolData as $symbol => $data) {
+            $symbol = strtoupper($symbol);
+            $cacheKey = "prediction_v3_{$symbol}_{$interval}";
+            
+            $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
+            if ($cached) {
+                $batchResults[$symbol] = $cached;
+                continue;
+            }
+
+            if (!isset($data['klines']) || count($data['klines']) < 50) {
+                $batchResults[$symbol] = ['signal' => 'NEUTRAL', 'summary' => 'Insufficient data'];
+                continue;
+            }
+
+            $mlBatchInput[$symbol] = $data['klines'];
+        }
+
+        if (empty($mlBatchInput)) {
+            return $batchResults;
+        }
+
+        // 2. Perform Batch ML prediction (The bottleneck)
+        $mlResults = $this->ml->predictBatchXGBoost($mlBatchInput, 5);
+
+        // 3. Finalize each signal with TA confluence
+        foreach ($mlBatchInput as $symbol => $klines) {
+            $htfKlines = $symbolData[$symbol]['htfKlines'] ?? [];
+            $mlResult = $mlResults[$symbol] ?? ['error' => 'ML result missing'];
+            
+            $signal = $this->calculateSignal($klines, $symbol, $interval, $htfKlines, 50, 1.0, false, $mlResult);
+            
+            $cacheKey = "prediction_v3_{$symbol}_{$interval}";
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $signal, 60);
+            $batchResults[$symbol] = $signal;
+        }
+
+        return $batchResults;
+    }
+
+    private function calculateSignal(array $klines, string $symbol, string $interval, array $htfKlines, int $fearGreed, float $lsRatio, bool $isTrending, ?array $precomputedML = null): array
     {
         $defaultResponse = [
             'signal' => 'NEUTRAL',
@@ -325,7 +371,7 @@ class PredictionService
         $indicatorsList[] = ['name' => 'Kalman Denoise', 'value' => 'Smooth', 'signal' => $kalmanSig];
 
         // XGBoost Forecast (Real ML)
-        $mlResult = $this->ml->predictXGBoost($klines, 5);
+        $mlResult = $precomputedML ?? $this->ml->predictXGBoost($klines, 5);
         $mlSig = 'NEUTRAL';
         $lr = ['slope' => 0, 'intercept' => 0, 'r_squared' => 0]; 
         

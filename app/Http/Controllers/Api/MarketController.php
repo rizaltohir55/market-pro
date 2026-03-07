@@ -81,17 +81,15 @@ class MarketController extends Controller
         $symbols = array_slice(array_filter(array_map(function($s) {
             return is_scalar($s) ? trim((string)$s) : '';
         }, $symbols)), 0, 50);
-        $results = [];
-
+        
+        $batchKlines = [];
         foreach ($symbols as $symbol) {
-            $symbol = strtoupper($symbol);
-            $cacheKey = "prediction_{$symbol}_{$interval}";
-            
-            $results[$symbol] = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function() use ($market, $prediction, $symbol, $interval) {
-                $klines = $market->getKlines($symbol, $interval, 200);
-                return $prediction->getScalpingSignal($klines, $symbol, $interval);
-            });
+            $batchKlines[strtoupper($symbol)] = [
+                'klines' => $market->getKlines($symbol, $interval, 200)
+            ];
         }
+
+        $results = $prediction->getBatchSignals($batchKlines, $interval);
 
         return response()->json($results);
     }

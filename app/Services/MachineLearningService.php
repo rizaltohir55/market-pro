@@ -60,6 +60,49 @@ class MachineLearningService
     }
 
     /**
+     * Compute batch real ML Forecasts using XGBoost (Python).
+     */
+    public function predictBatchXGBoost(array $batchInput, int $forecastSteps = 5): array
+    {
+        $input = [
+            'batch' => $batchInput,
+            'steps' => $forecastSteps
+        ];
+
+        $jsonInput = json_encode($input);
+        $scriptPath = base_path('app/ML/xgboost_engine.py');
+        
+        $descriptorspec = [
+            0 => ["pipe", "r"],
+            1 => ["pipe", "w"],
+            2 => ["pipe", "w"]
+        ];
+
+        $process = proc_open("python \"{$scriptPath}\"", $descriptorspec, $pipes);
+
+        if (is_resource($process)) {
+            fwrite($pipes[0], $jsonInput);
+            fclose($pipes[0]);
+
+            $stdout = stream_get_contents($pipes[1]);
+            fclose($pipes[1]);
+
+            $stderr = stream_get_contents($pipes[2]);
+            fclose($pipes[2]);
+
+            $returnValue = proc_close($process);
+
+            if ($returnValue === 0) {
+                return json_decode($stdout, true) ?? ['error' => 'Invalid JSON output from Python'];
+            } else {
+                return ['error' => "Batch process failed. Stderr: {$stderr}"];
+            }
+        }
+
+        return ['error' => 'Failed to open batch process'];
+    }
+
+    /**
      * Compute a Linear Regression Forecast for a series (Legacy/Fallback).
      */
     public function predictLinearRegression(array $values, int $forecastPeriod = 5): array
