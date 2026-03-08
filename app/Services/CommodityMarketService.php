@@ -98,7 +98,7 @@ class CommodityMarketService extends BaseMarketService
         // Fallback: CoinGecko silver
         if (!$silverFetched) {
             try {
-                $r = Http::withOptions(['verify' => storage_path('cacert.pem')])
+                $r = Http::withOptions(['verify' => config('services.market.ca_cert')])
                     ->withHeaders(['Accept' => 'application/json', 'User-Agent' => 'Mozilla/5.0 Chrome/120'])
                     ->timeout(10)
                     ->get('https://api.coingecko.com/api/v3/simple/price', [

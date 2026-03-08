@@ -45,7 +45,7 @@ abstract class BaseMarketService
 
     protected function yahooGet(string $path, array $params = [])
     {
-        return Http::withOptions(['verify' => storage_path('cacert.pem'), 'curl' => [CURLOPT_FOLLOWLOCATION => true]])
+        return Http::withOptions(['verify' => config('services.market.ca_cert'), 'curl' => [CURLOPT_FOLLOWLOCATION => true]])
             ->withHeaders($this->browserHeaders())
             ->timeout(10)
             ->get('https://query1.finance.yahoo.com' . $path, $params);
@@ -66,7 +66,7 @@ abstract class BaseMarketService
                 curl_setopt($ch, CURLOPT_HEADER, 1);
                 curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
                 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
-                curl_setopt($ch, CURLOPT_CAINFO, storage_path('cacert.pem'));
+                curl_setopt($ch, CURLOPT_CAINFO, config('services.market.ca_cert'));
                 curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                 $res = curl_exec($ch);
                 $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
@@ -90,7 +90,7 @@ abstract class BaseMarketService
                 curl_setopt($ch2, CURLOPT_HTTPHEADER, ["Cookie: $cookieStr"]);
                 curl_setopt($ch2, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
                 curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, 1);
-                curl_setopt($ch2, CURLOPT_CAINFO, storage_path('cacert.pem'));
+                curl_setopt($ch2, CURLOPT_CAINFO, config('services.market.ca_cert'));
                 curl_setopt($ch2, CURLOPT_TIMEOUT, 10);
                 $crumb = curl_exec($ch2);
                 $status = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
@@ -134,7 +134,7 @@ abstract class BaseMarketService
         curl_setopt($ch3, CURLOPT_HTTPHEADER, $headerArray);
         curl_setopt($ch3, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
         curl_setopt($ch3, CURLOPT_SSL_VERIFYPEER, 1);
-        curl_setopt($ch3, CURLOPT_CAINFO, storage_path('cacert.pem'));
+        curl_setopt($ch3, CURLOPT_CAINFO, config('services.market.ca_cert'));
         curl_setopt($ch3, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch3, CURLOPT_FOLLOWLOCATION, 1);
         $data = curl_exec($ch3);
@@ -175,7 +175,7 @@ abstract class BaseMarketService
 
     protected function exchangeRateGet(string $path, array $params = [])
     {
-        return Http::withOptions(['verify' => storage_path('cacert.pem')])
+        return Http::withOptions(['verify' => config('services.market.ca_cert')])
             ->withHeaders([
                 'Accept'     => 'application/json',
                 'User-Agent' => 'Mozilla/5.0 Chrome/120',
@@ -186,7 +186,7 @@ abstract class BaseMarketService
 
     protected function okxGet(string $path, array $params = [])
     {
-        return Http::withOptions(['verify' => storage_path('cacert.pem')])
+        return Http::withOptions(['verify' => config('services.market.ca_cert')])
             ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
             ->timeout(8)
             ->get($this->okxBase . $path, $params);
@@ -194,7 +194,7 @@ abstract class BaseMarketService
 
     protected function binanceGet(string $path, array $params = [])
     {
-        return Http::withOptions(['verify' => storage_path('cacert.pem')])
+        return Http::withOptions(['verify' => config('services.market.ca_cert')])
             ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
             ->timeout(8)
             ->get($this->binanceBase . $path, $params);

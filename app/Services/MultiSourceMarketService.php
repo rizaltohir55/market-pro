@@ -62,7 +62,7 @@ class MultiSourceMarketService
             return $cached;
         }
 
-        $cacert = storage_path('cacert.pem');
+        $cacert = config('services.market.ca_cert');
         $verify = file_exists($cacert) ? $cacert : true;
 
         try {
@@ -103,7 +103,7 @@ class MultiSourceMarketService
     {
         $base = $this->getWorkingBinanceBase();
         return Http::withOptions([
-                'verify' => storage_path('cacert.pem'),
+                'verify' => config('services.market.ca_cert'),
             ])
             ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
             ->timeout(10)
@@ -113,7 +113,7 @@ class MultiSourceMarketService
     private function coinGeckoGet(string $path, array $params = [])
     {
         return Http::withOptions([
-                'verify' => storage_path('cacert.pem'),
+                'verify' => config('services.market.ca_cert'),
             ])
             ->withHeaders([
                 'Accept'     => 'application/json',
@@ -207,8 +207,14 @@ class MultiSourceMarketService
     public function getKlines(string $symbol, string $interval = '1h', int $limit = 200): array
     {
         $cacheKey = "market_klines_{$symbol}_{$interval}_{$limit}";
-        return Cache::remember($cacheKey, 60, function () use ($symbol, $interval, $limit) {
+        
+        // Return cached value only if it's non-empty
+        $cached = Cache::get($cacheKey);
+        if (!empty($cached)) {
+            return $cached;
+        }
 
+        $result = (function () use ($symbol, $interval, $limit) {
             // 1. Try Binance klines FIRST (auto-detects working endpoint)
             try {
                 $response = $this->binanceGet('/api/v3/klines', [
@@ -273,7 +279,14 @@ class MultiSourceMarketService
             // All real sources failed — return empty. No synthetic/dummy data.
             Log::error("MarketService: ALL real klines sources failed for $symbol/$interval. Returning empty — no dummy data generated.");
             return [];
-        }) ?? [];
+        })();
+
+        // Only cache non-empty results
+        if (!empty($result)) {
+            Cache::put($cacheKey, $result, 60);
+        }
+
+        return $result;
     }
 
 
@@ -283,7 +296,13 @@ class MultiSourceMarketService
     public function getDepth(string $symbol, int $limit = 20): array
     {
         $cacheKey = "market_depth_{$symbol}_{$limit}";
-        return Cache::remember($cacheKey, 5, function () use ($symbol, $limit) {
+        
+        $cached = Cache::get($cacheKey);
+        if (!empty($cached)) {
+            return $cached;
+        }
+
+        $result = (function () use ($symbol, $limit) {
             try {
                 $response = $this->binanceGet('/api/v3/depth', [
                     'symbol' => strtoupper($symbol),
@@ -297,7 +316,14 @@ class MultiSourceMarketService
                 Log::warning('MarketService: Binance depth exception — ' . $e->getMessage());
             }
             return ['bids' => [], 'asks' => []];
-        }) ?? ['bids' => [], 'asks' => []];
+        })();
+
+        // Only cache if it has bids or asks
+        if (!empty($result['bids']) || !empty($result['asks'])) {
+            Cache::put($cacheKey, $result, 5);
+        }
+
+        return $result;
     }
 
     /**
@@ -306,7 +332,13 @@ class MultiSourceMarketService
     public function getRecentTrades(string $symbol, int $limit = 50): array
     {
         $cacheKey = "market_trades_{$symbol}";
-        return Cache::remember($cacheKey, 5, function () use ($symbol, $limit) {
+        
+        $cached = Cache::get($cacheKey);
+        if (!empty($cached)) {
+            return $cached;
+        }
+
+        $result = (function () use ($symbol, $limit) {
             try {
                 $response = $this->binanceGet('/api/v3/trades', [
                     'symbol' => strtoupper($symbol),
@@ -319,7 +351,13 @@ class MultiSourceMarketService
                 Log::warning('MarketService: Binance trades exception — ' . $e->getMessage());
             }
             return [];
-        }) ?? [];
+        })();
+
+        if (!empty($result)) {
+            Cache::put($cacheKey, $result, 5);
+        }
+
+        return $result;
     }
 
     /**
@@ -464,7 +502,14 @@ class MultiSourceMarketService
      */
     public function getTrendingTraffic(): array
     {
-        return Cache::remember('macro_trending_traffic', 600, function () {
+        $cacheKey = 'macro_trending_traffic';
+        
+        $cached = Cache::get($cacheKey);
+        if (!empty($cached)) {
+            return $cached;
+        }
+
+        $result = (function () {
             try {
                 $res = Http::timeout(8)->get('https://api.coingecko.com/api/v3/search/trending');
                 if ($res->successful()) {
@@ -483,7 +528,13 @@ class MultiSourceMarketService
                 Log::warning('CoinGecko Trending Traffic Error: ' . $e->getMessage());
             }
             return []; // Fallback
-        });
+        })();
+
+        if (!empty($result)) {
+            Cache::put($cacheKey, $result, 600);
+        }
+
+        return $result;
     }
 
     // ─── PRIVATE HELPERS ─────────────────────────────────────────────────────

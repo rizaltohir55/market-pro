@@ -36,6 +36,10 @@ return [
     ],
 
     // ─── Market Data APIs ─────────────────────────────────────────────────────
+    'market' => [
+        'ca_cert' => storage_path('cacert.pem'),
+    ],
+
     'finnhub' => [
         'key' => env('FINNHUB_API_KEY'),
     ],

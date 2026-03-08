@@ -27,7 +27,8 @@ class MachineLearningService
         ];
 
         // Ensure we use the correct python command (python or python3)
-        $process = proc_open("python \"{$scriptPath}\"", $descriptorspec, $pipes);
+        // Hardened: using array-based command to prevent injection
+        $process = proc_open(['python', $scriptPath], $descriptorspec, $pipes);
 
         if (is_resource($process)) {
             fwrite($pipes[0], $jsonInput);
@@ -78,7 +79,8 @@ class MachineLearningService
             2 => ["pipe", "w"]
         ];
 
-        $process = proc_open("python \"{$scriptPath}\"", $descriptorspec, $pipes);
+        // Hardened: using array-based command to prevent injection
+        $process = proc_open(['python', $scriptPath], $descriptorspec, $pipes);
 
         if (is_resource($process)) {
             fwrite($pipes[0], $jsonInput);

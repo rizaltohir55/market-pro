@@ -110,7 +110,7 @@ class ForexMarketService extends BaseMarketService
         $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($crossMap) {
             foreach ($crossMap as $cur => $sym) {
                 $pool->as($cur)
-                    ->withOptions(['verify' => storage_path('cacert.pem')])
+                    ->withOptions(['verify' => config('services.market.ca_cert')])
                     ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
                     ->timeout(8)
                     ->get($this->binanceBase . '/api/v3/ticker/24hr', ['symbol' => $sym]);

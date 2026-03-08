@@ -15,11 +15,14 @@ def calculate_rsi(series, period=14):
 def add_features(df):
     df = df.copy()
     
-    # 1. Lags
+    # Ensure sorted by time if time exists, though here index is sequential
+    
+    # 1. Lags (Shifted close)
     for i in range(1, 11):
         df[f'lag_{i}'] = df['close'].shift(i)
     
-    # 2. Indicators
+    # 2. Indicators (Manual calculation)
+    # EMA with adjust=False starts from the first value (seeded with price)
     df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
     df['ema_21'] = df['close'].ewm(span=21, adjust=False).mean()
     df['rsi'] = calculate_rsi(df['close'], 14)
@@ -42,16 +45,25 @@ def add_features(df):
     df['atr'] = true_range.rolling(window=14).mean()
     df['atr_ratio'] = df['atr'] / df['close']
     
-    # 6. VWAP Distance (Safe Division)
+    # 6. VWAP Distance
     typical_price = (df['high'] + df['low'] + df['close']) / 3
     tp_v = typical_price * df['volume']
     cum_vol = df['volume'].cumsum()
     df['vwap'] = np.where(cum_vol > 0, tp_v.cumsum() / cum_vol, typical_price)
     df['vwap_dist'] = np.where(df['vwap'] != 0, (df['close'] - df['vwap']) / df['vwap'], 0)
     
-    # 7. Volume Change (Fill NaNs)
-    df['vol_change_pct'] = df['volume'].pct_change(periods=1).fillna(0)
+    # 7. Volume Change
+    df['vol_change_pct'] = df['volume'].pct_change(periods=1)
     
+    # Fix Data Depletion: Instead of dropping all NaNs immediately, 
+    # we backfill the indicator windows to keep more training data.
+    # Lags will still have NaNs at the start, which we will handle.
+    indicator_cols = ['rsi', 'roc', 'volatility', 'atr', 'atr_ratio', 'vol_change_pct']
+    for col in indicator_cols:
+        if col in df.columns:
+            # fillna(method='bfill') is deprecated in newer pandas, using ffill/bfill directly
+            df[col] = df[col].bfill()
+            
     return df
 
 def process_symbol(klines, forecast_steps=5):
@@ -66,7 +78,11 @@ def process_symbol(klines, forecast_steps=5):
             df[col] = df[col].astype(float)
     
     # Apply Feature Engineering
-    df = add_features(df).dropna()
+    df = add_features(df)
+    
+    # Dropping only rows where lag_10 is missing (the longest lag)
+    # This preserves (~50 - 10) = 40 rows instead of 24.
+    df = df.dropna(subset=['lag_10']).fillna(0)
     
     if df.empty:
         return {"error": "Dataframe empty after feature engineering"}
@@ -136,9 +152,10 @@ def process_symbol(klines, forecast_steps=5):
     return {
         "forecast": forecast,
         "r_squared": r_squared,
-        "model_type": "XGBoost (Ultra V5)",
+        "model_type": "XGBoost (Ultra V6 - Dynamic)",
         "top_features": top_features,
-        "features_used": all_features
+        "features_used": all_features,
+        "training_samples": len(df)
     }
 
 def main():

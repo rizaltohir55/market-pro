@@ -30,7 +30,7 @@ class MarketController extends Controller
     {
         $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval = $request->get('interval', '1h');
-        $limit    = min((int) $request->get('limit', 200), 500);
+        $limit    = max(1, min((int) $request->get('limit', 200), 500));
 
         $data = $market->getKlines($symbol, $interval, $limit);
         return response()->json($data);
@@ -39,7 +39,7 @@ class MarketController extends Controller
     public function depth(Request $request, MultiSourceMarketService $market): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'BTCUSDT'));
-        $limit  = min((int) $request->get('limit', 20), 100);
+        $limit  = max(1, min((int) $request->get('limit', 20), 100));
 
         $data = $market->getDepth($symbol, $limit);
         return response()->json($data);
@@ -48,7 +48,7 @@ class MarketController extends Controller
     public function trades(Request $request, MultiSourceMarketService $market): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'BTCUSDT'));
-        $limit  = min((int) $request->get('limit', 50), 100);
+        $limit  = max(1, min((int) $request->get('limit', 50), 100));
 
         $data = $market->getRecentTrades($symbol, $limit);
         return response()->json($data);
@@ -102,7 +102,7 @@ class MarketController extends Controller
     {
         $symbol    = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval  = $request->get('interval', '1d');
-        $limit     = min((int) $request->get('limit', 365), 1000);
+        $limit     = max(1, min((int) $request->get('limit', 365), 1000));
         $startTime = (int) $request->get('from', 0);  // UNIX ms
         $endTime   = (int) $request->get('to', 0);    // UNIX ms
 
@@ -186,7 +186,7 @@ class MarketController extends Controller
     public function forexHistory(Request $request, ForexMarketService $forexMarket): JsonResponse
     {
         $currency = strtoupper($request->get('currency', 'EUR'));
-        $days     = min((int) $request->get('days', 30), 365);
+        $days     = max(1, min((int) $request->get('days', 30), 365));
         $data     = $forexMarket->getForexHistory($currency, $days);
         return response()->json($data);
     }
@@ -372,7 +372,7 @@ class MarketController extends Controller
     public function companyNews(Request $request, NewsMarketService $newsMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
-        $days   = min((int) $request->get('days', 7), 30);
+        $days   = max(1, min((int) $request->get('days', 7), 30));
         $data   = $newsMarket->getCompanyNews($symbol, $days);
         return response()->json($data);
     }

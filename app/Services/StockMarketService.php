@@ -62,7 +62,7 @@ class StockMarketService extends BaseMarketService
             // ── Fallback: Stooq CSV (very reliable, no key) ───────────────
             try {
                 $stooqSym = strtolower($symbol) . '.us';
-                $r = Http::withOptions(['verify' => storage_path('cacert.pem'), 'curl' => [CURLOPT_FOLLOWLOCATION => true]])
+                $r = Http::withOptions(['verify' => config('services.market.ca_cert'), 'curl' => [CURLOPT_FOLLOWLOCATION => true]])
                     ->withHeaders($this->browserHeaders())
                     ->timeout(8)
                     ->get('https://stooq.com/q/l/', [
@@ -262,7 +262,7 @@ class StockMarketService extends BaseMarketService
             $hosts = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
             foreach ($hosts as $host) {
                 try {
-                    $r = Http::withOptions(['verify'=>storage_path('cacert.pem'),'curl'=>[CURLOPT_FOLLOWLOCATION=>true]])
+                    $r = Http::withOptions(['verify'=>config('services.market.ca_cert'),'curl'=>[CURLOPT_FOLLOWLOCATION=>true]])
                         ->withHeaders($this->browserHeaders())
                         ->timeout(15)
                         ->get("$host/v7/finance/quote", [
@@ -315,7 +315,7 @@ class StockMarketService extends BaseMarketService
                     $reqs = [];
                     foreach ($symbols as $sym) {
                         $reqs[] = $pool->as($sym)
-                            ->withOptions(['verify' => storage_path('cacert.pem')])
+                            ->withOptions(['verify' => config('services.market.ca_cert')])
                             ->get("https://query1.finance.yahoo.com/v8/finance/chart/" . urlencode($sym) . "?interval=1d&range=2d");
                     }
                     return $reqs;
@@ -570,7 +570,7 @@ class StockMarketService extends BaseMarketService
                     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
                     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
-                    curl_setopt($ch, CURLOPT_CAINFO, storage_path('cacert.pem'));
+                    curl_setopt($ch, CURLOPT_CAINFO, config('services.market.ca_cert'));
                     curl_setopt($ch, CURLOPT_HTTPHEADER, array_values($this->browserHeaders()));
                     curl_setopt($ch, CURLOPT_TIMEOUT, 8);
                     $html = curl_exec($ch);

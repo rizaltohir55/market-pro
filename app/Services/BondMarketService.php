@@ -34,7 +34,7 @@ class BondMarketService extends BaseMarketService
             $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($series) {
                 foreach ($series as $seriesId => $meta) {
                     $pool->as($seriesId)
-                        ->withOptions(['verify' => storage_path('cacert.pem')])
+                        ->withOptions(['verify' => config('services.market.ca_cert')])
                         ->withHeaders($this->browserHeaders())
                         ->timeout(20)
                         ->get($this->fredBase, ['id' => $seriesId]);
@@ -48,7 +48,7 @@ class BondMarketService extends BaseMarketService
 
                     // Fallback to sequential if pool failed for this series
                     if (!($r instanceof \Illuminate\Http\Client\Response) || !$r->successful()) {
-                        $r = Http::withOptions(['verify' => storage_path('cacert.pem')])
+                        $r = Http::withOptions(['verify' => config('services.market.ca_cert')])
                             ->withHeaders($this->browserHeaders())
                             ->timeout(10)
                             ->get($this->fredBase, ['id' => $seriesId]);
