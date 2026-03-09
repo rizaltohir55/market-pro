@@ -72,6 +72,20 @@ class BroadcastMarketData extends Command
                     'prediction' => $prediction->getScalpingSignal($klines15m, $symbol, '15m', $klines1h, $fearGreed, $lsRatio, $isTrending),
                 ];
 
+                // Watchlist & Shared
+                $wlSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'PAXGUSDT', 'XRPUSDT', 'DOGEUSDT'];
+                $allTickers = $market->getTicker24hr();
+                $wlData = [];
+                if (!empty($allTickers) && is_array($allTickers)) {
+                    foreach ($allTickers as $t) {
+                        if (isset($t['symbol']) && in_array($t['symbol'], $wlSymbols)) {
+                            $wlData[] = $t;
+                        }
+                    }
+                }
+                $payload['watchlist'] = $wlData;
+                $payload['top_pairs'] = $market->getTopPairs(30);
+
                 // Broadcast
                 event(new MarketUpdated($symbol, $payload));
 

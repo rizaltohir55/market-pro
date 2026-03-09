@@ -18,7 +18,9 @@ class PredictionService
     public function getScalpingSignal(array $klines, string $symbol = 'UNKNOWN', string $interval = '15m', array $htfKlines = [], int $fearGreed = 50, float $lsRatio = 1.0, bool $isTrending = false): array
     {
         $symbol = strtoupper($symbol);
-        $cacheKey = "prediction_v3_{$symbol}_{$interval}";
+        // Include macro context in cache key to ensure predictions are context-aware
+        $contextHash = md5($interval . '_' . $fearGreed . '_' . round($lsRatio, 2) . ($isTrending ? 'T' : 'R'));
+        $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
         
         return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending) {
             return $this->calculateSignal($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending);
@@ -36,7 +38,9 @@ class PredictionService
         // 1. Prepare data and check cache
         foreach ($symbolData as $symbol => $data) {
             $symbol = strtoupper($symbol);
-            $cacheKey = "prediction_v3_{$symbol}_{$interval}";
+            // Since batch signals often use default macro values (50, 1.0, false), we use a stable hash
+            $contextHash = md5($interval . '_50_1.0_R');
+            $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
             
             $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
             if ($cached) {
@@ -66,7 +70,8 @@ class PredictionService
             
             $signal = $this->calculateSignal($klines, $symbol, $interval, $htfKlines, 50, 1.0, false, $mlResult);
             
-            $cacheKey = "prediction_v3_{$symbol}_{$interval}";
+            $contextHash = md5($interval . '_50_1.0_R');
+            $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
             \Illuminate\Support\Facades\Cache::put($cacheKey, $signal, 300);
             $batchResults[$symbol] = $signal;
         }

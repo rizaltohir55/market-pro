@@ -11,7 +11,7 @@ export const Dashboard = {
 
         this.initTilt();
         this.loadDashboardData();
-        this.initSSE();
+        this.initWebSockets();
     },
 
     initTilt() {
@@ -225,21 +225,30 @@ export const Dashboard = {
         }).join('');
     },
 
-    initSSE() {
-        // use relative path which is equivalent to {{ url('/api/market/stream') }}?page=dashboard
-        const sseSource = new EventSource('/api/market/stream?page=dashboard');
-        sseSource.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.market) {
-                    this.renderMarketTable(data.market);
-                    this.updateTickerPrices(data.market);
+    // initSSE is removed in favor of WebSockets.
+
+    initWebSockets() {
+        if (!window.Echo) {
+            console.error('Laravel Echo not found. WebSocket updates disabled.');
+            return;
+        }
+
+        console.info('[Dashboard] Subscribing to market.all WebSocket channel...');
+        
+        window.Echo.channel('market.all')
+            .listen('.updated', (e) => {
+                const data = e.data;
+                console.debug('[WebSocket] Market Update Received:', data);
+
+                if (data.dashboard && data.dashboard.market) {
+                    this.renderMarketTable(data.dashboard.market);
+                    this.updateTickerPrices(data.dashboard.market);
                 }
+                
                 if (data.watchlist) {
                     this.updateKPIPrices(data.watchlist);
                 }
-            } catch (e) { console.error('SSE Error:', e); }
-        };
+            });
     },
 
     updateKPIPrices(tickers) {

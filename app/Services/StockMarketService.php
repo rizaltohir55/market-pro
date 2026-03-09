@@ -589,17 +589,37 @@ class StockMarketService extends BaseMarketService
                     }
                 }
 
-                // 2. Finnhub Price Target (Free tier usually supports this)
-                $rPT = $this->finnhubGet('/stock/price-target', ['symbol' => $symbol]);
-                if ($rPT && $rPT->successful()) {
-                    $pt = $rPT->json();
-                    if (!empty($pt['targetMean'])) {
+                // 2. ML Service Price Target (Robust yfinance fallback)
+                $mlUrl = config('services.ml.url') . '/stock/data?symbol=' . urlencode($symbol);
+                $rML = Http::withHeaders(['X-ML-Key' => config('services.ml.key')])
+                    ->timeout(5)
+                    ->get($mlUrl);
+                
+                if ($rML->successful()) {
+                    $mlData = $rML->json();
+                    if (!empty($mlData['target_mean'])) {
                         $baseRes['target_price'] = [
-                            'current' => $pt['targetMean'] ?? null,
-                            'high'    => $pt['targetHigh'] ?? null,
-                            'low'     => $pt['targetLow'] ?? null,
-                            'mean'    => $pt['targetMean'] ?? null,
+                            'current' => $mlData['target_mean'],
+                            'high'    => $mlData['target_high'],
+                            'low'     => $mlData['target_low'],
+                            'mean'    => $mlData['target_mean'],
                         ];
+                    }
+                }
+                
+                // 3. Finnhub Price Target (Original logic as secondary)
+                if (empty($baseRes['target_price']['mean'])) {
+                    $rPT = $this->finnhubGet('/stock/price-target', ['symbol' => $symbol]);
+                    if ($rPT && $rPT->successful()) {
+                        $pt = $rPT->json();
+                        if (!empty($pt['targetMean'])) {
+                            $baseRes['target_price'] = [
+                                'current' => $pt['targetMean'] ?? null,
+                                'high'    => $pt['targetHigh'] ?? null,
+                                'low'     => $pt['targetLow'] ?? null,
+                                'mean'    => $pt['targetMean'] ?? null,
+                            ];
+                        }
                     }
                 }
             } catch (\Exception $e) {
@@ -609,45 +629,26 @@ class StockMarketService extends BaseMarketService
                 Log::warning("Analyst estimates via Finnhub failed for $symbol — " . $e->getMessage());
             }
 
-            // 3. Fallback: Robust Yahoo Finance Scrape (extract from JSON state)
-            if (empty($baseRes['target_price']['mean'])) {
-                try {
-                    $url = "https://finance.yahoo.com/quote/{$symbol}";
-                    $ch = curl_init($url);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-                    
-                    $verify = (bool) config('services.market.ca_cert', true);
-                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verify ? 1 : 0);
-                    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verify ? 2 : 0);
-                    if ($verify) {
-                        curl_setopt($ch, CURLOPT_CAINFO, config('services.market.ca_cert'));
-                    }
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, array_values($this->browserHeaders()));
-                    curl_setopt($ch, CURLOPT_TIMEOUT, 6);
-                    $html = curl_exec($ch);
-                    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
-
-                    if ($status == 200 && $html) {
-                        // Yahoo stores state in a JSON string inside a script tag
-                        // We look for 'targetMeanPrice' or similar indicators in the JSON blob
-                        if (preg_match('/"targetMeanPrice":\s*\{\s*"raw":\s*([\d\.]+)/i', $html, $m)) {
-                            $baseRes['target_price']['mean'] = (float) $m[1];
-                        } elseif (preg_match('/targetPrice.*?data.*?value.*?([\d\.]+)/i', $html, $m)) {
-                            $baseRes['target_price']['mean'] = (float) $m[1];
-                        }
-                    }
-                } catch (\Exception $e) {
-                    Log::warning("Yahoo price target fallback failed for $symbol - " . $e->getMessage());
-                }
-            }
-
+            // DEPRECATED: Brittle Regex scraping removed in favor of ML Microservice yfinance integration above.
             return $baseRes;
         }) ?? [];
     }
 
-    public function getPeerComparison(array $symbols): array
+    /**
+     * Public wrapper for finnhub metric fetch, used by background jobs.
+     */
+    public function getExternalMetric(string $symbol): ?array
+    {
+        try {
+            $r = $this->finnhubGet('/stock/metric', ['symbol' => $symbol, 'metric' => 'all']);
+            return ($r && $r->successful()) ? $r->json() : null;
+        } catch (\Exception $e) {
+            Log::warning("Finnhub metric fetch failed for $symbol: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    public function getPeerComparison(string $symbol): array
     {
         $quotes = $this->getBulkStockQuotes($symbols);
         $symbols = array_map('strtoupper', array_column($quotes, 'symbol'));
@@ -665,56 +666,9 @@ class StockMarketService extends BaseMarketService
             }
         }
 
-        // 2. Fetch missing sequentially with small delay to avoid rate limit (30 req/min)
+        // 2. Dispatch missing data fetch to background job to prevent UI hang
         if (!empty($missing)) {
-            foreach ($missing as $sym) {
-                try {
-                    $r = $this->finnhubGet('/stock/metric', ['symbol' => $sym, 'metric' => 'all']);
-                    if ($r && $r->successful()) {
-                        $d = $r->json();
-                        if (isset($d['metric'])) {
-                            $m = $d['metric'];
-                            $valData = [
-                                'symbol' => $sym,
-                                'valuation' => [
-                                    'pe_ratio'   => $m['peTTM'] ?? null,
-                                    'forward_pe' => $m['forwardPE'] ?? null,
-                                    'peg_ratio'  => $m['pegTTM'] ?? null,
-                                    'price_to_book' => $m['pbAnnual'] ?? $m['pbQuarterly'] ?? null,
-                                    'price_to_sales' => $m['psTTM'] ?? $m['psAnnual'] ?? null,
-                                    'ev_ebitda'  => $m['evEbitdaTTM'] ?? null,
-                                    'ev_revenue' => $m['evRevenueTTM'] ?? null,
-                                ],
-                                'ratios' => [
-                                    'roe' => $m['roeTTM'] ?? null,
-                                    'roa' => $m['roaTTM'] ?? null,
-                                    'gross_margin' => $m['grossMarginTTM'] ?? null,
-                                    'operating_margin' => $m['operatingMarginTTM'] ?? null,
-                                    'net_margin' => $m['netProfitMarginTTM'] ?? null,
-                                    'debt_equity' => $m['longTermDebt/equityQuarterly'] ?? $m['totalDebt/totalEquityQuarterly'] ?? null,
-                                    'current_ratio' => $m['currentRatioQuarterly'] ?? null,
-                                    'revenue_growth' => $m['revenueGrowthQuarterlyYoy'] ?? null,
-                                    'dividend_yield' => $m['currentDividendYieldTTM'] ?? null,
-                                ],
-                                'financials' => [
-                                    'total_cash' => null,
-                                    'total_debt' => null,
-                                    'total_revenue' => null,
-                                    'ebitda'    => null,
-                                    'free_cash_flow' => null,
-                                ]
-                            ];
-                            $valuations[$sym] = $valData;
-                            // Fundamental data changes slowly; cache for 24h to avoid API drain
-                            Cache::put("equity_valuation_{$sym}_v3", $valData, 86400);
-                        }
-                    }
-                    // Wait 250ms between requests to respect 30 req/min limit
-                    usleep(250000); 
-                } catch (\Exception $e) {
-                    Log::warning("Peer comparison fetch failed for $sym: " . $e->getMessage());
-                }
-            }
+            \App\Jobs\FetchPeerData::dispatch($missing);
         }
 
         // 3. Assemble results

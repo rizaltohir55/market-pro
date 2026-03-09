@@ -212,53 +212,71 @@ document.addEventListener('DOMContentLoaded', function() {
     initAnalysisChart();
     initWatchlist();
 
-    // Start persistent Real-Time Server-Sent Events Stream
-    initSSE();
+    // Start persistent Real-Time Updates
+    // initSSE(); // Deprecated
+    initWebSockets();
     initBinanceWS();
 });
 
-let sseSource = null;
+// Deprecated: Use initWebSockets instead
 function initSSE() {
-    sseSource = new EventSource('{{ url('/api/market/stream') }}?page=analysis&symbol=' + SYMBOL);
-    
-    sseSource.onopen = () => {
-        document.getElementById('conn-dot')?.classList.remove('disconnected');
-        if (document.getElementById('conn-text')) document.getElementById('conn-text').textContent = 'Connected (SSE)';
-        if (document.getElementById('ws-status-text')) document.getElementById('ws-status-text').textContent = 'Connected';
-    };
-    
-    sseSource.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
+    console.warn('initSSE is deprecated. Use initWebSockets.');
+}
+
+function initWebSockets() {
+    if (!window.Echo) {
+        console.error('Laravel Echo not found.');
+        return;
+    }
+
+    console.info(`[Analysis] Subscribing to market.${SYMBOL} and market.all...`);
+
+    // Listen to specific symbol channel (contains predictions for this symbol)
+    window.Echo.channel(`market.${SYMBOL}`)
+        .listen('.updated', (e) => {
+            const data = e.data;
+            handleBroadcastData(data);
+        });
+
+    // Listen to 'all' for shared components
+    window.Echo.channel('market.all')
+        .listen('.updated', (e) => {
+            const data = e.data;
             
-            // 1. Update Chart (klines returned are 1h by default from the stream for prediction/analysis basis)
-            // But the chart on this page is labeled 15m. So we should rely on the 15m klines from the root logic.
-            // Actually, the API stream pushes 'klines' (1h) and 'predictions'. We should sync the chart to it or just rely on predictions.
-            // Real-time ticking is now handled separately by Binance WebSocket (initBinanceWS)
-            // so we don't process data.ticker here for chart ticking anymore.
-            
-            // 2. Update Predictions
-            if (data.predictions) {
-                if (data.predictions['15m']) updatePredictionDOM('15m', data.predictions['15m']);
-                if (data.predictions['1h'])  updatePredictionDOM('1h',  data.predictions['1h']);
-                if (data.predictions['4h'])  updatePredictionDOM('4h',  data.predictions['4h']);
-            }
-            
-            // 3. Shared components
-            if (data.top_pairs) {
-                if (typeof window.renderTickerBar === 'function') {
+            if (e.symbol === SYMBOL) {
+                handleBroadcastData(data);
+            } else {
+                if (data.watchlist) renderWatchlist(data.watchlist);
+                if (data.top_pairs && typeof window.renderTickerBar === 'function') {
                     window.renderTickerBar(data.top_pairs);
                 }
             }
-            if (data.watchlist) renderWatchlist(data.watchlist);
-            
-            if (window.updateLastUpdate) window.updateLastUpdate();
-        } catch(e) { console.error('SSE Error:', e); }
-    };
+        });
+}
+
+function handleBroadcastData(data) {
+    // 1. Update Predictions
+    // The payload might have predictions at the root or under trading
+    const predictions = data.predictions || (data.trading ? data.trading.prediction : null);
     
-    sseSource.onerror = () => {
-        console.warn('SSE connection lost, reconnecting...');
-    };
+    if (predictions) {
+        // If it's the specific single prediction from 'trading' payload
+        if (predictions.signal && !predictions['15m']) {
+             updatePredictionDOM('15m', predictions); // Fallback to 15m slot
+        } else {
+            if (predictions['15m']) updatePredictionDOM('15m', predictions['15m']);
+            if (predictions['1h'])  updatePredictionDOM('1h',  predictions['1h']);
+            if (predictions['4h'])  updatePredictionDOM('4h',  predictions['4h']);
+        }
+    }
+    
+    // 2. Shared components
+    if (data.top_pairs && typeof window.renderTickerBar === 'function') {
+        window.renderTickerBar(data.top_pairs);
+    }
+    if (data.watchlist) renderWatchlist(data.watchlist);
+    
+    if (window.updateLastUpdate) window.updateLastUpdate();
 }
 
 let currentBar = null;

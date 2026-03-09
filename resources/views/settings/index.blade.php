@@ -120,36 +120,34 @@
 document.addEventListener('DOMContentLoaded', function() {
     initWatchlist();
 
-    // Start Real-Time Server-Sent Events Stream
-    initSSE();
+    // Start Real-Time Updates
+    // initSSE(); // Deprecated
+    initWebSockets();
 });
 
-let sseSource = null;
+// Deprecated: Use initWebSockets instead
 function initSSE() {
-    sseSource = new EventSource('{{ url('/api/market/stream') }}?page=dashboard'); // Dashboard stream has watchlist & top_pairs needed here
-    
-    sseSource.onopen = () => {
-        document.getElementById('conn-dot')?.classList.remove('disconnected');
-        if (document.getElementById('conn-text')) document.getElementById('conn-text').textContent = 'Connected (SSE)';
-        if (document.getElementById('ws-status-text')) document.getElementById('ws-status-text').textContent = 'Connected';
-    };
-    
-    sseSource.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            if (data.top_pairs) {
-                if (typeof window.renderTickerBar === 'function') {
-                    window.renderTickerBar(data.top_pairs);
-                }
+    console.warn('initSSE is deprecated. Use initWebSockets.');
+}
+
+function initWebSockets() {
+    if (!window.Echo) {
+        console.error('Laravel Echo not found.');
+        return;
+    }
+
+    console.info('[Settings] Subscribing to market.all...');
+
+    // Settings page only needs shared components like Watchlist
+    window.Echo.channel('market.all')
+        .listen('.updated', (e) => {
+            const data = e.data;
+            if (data.top_pairs && typeof window.renderTickerBar === 'function') {
+                window.renderTickerBar(data.top_pairs);
             }
             if (data.watchlist) renderWatchlist(data.watchlist);
             if (window.updateLastUpdate) window.updateLastUpdate();
-        } catch(e) { console.error('SSE Error:', e); }
-    };
-    
-    sseSource.onerror = () => {
-        console.warn('SSE connection lost, reconnecting...');
-    };
+        });
 }
 
 

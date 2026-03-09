@@ -231,13 +231,15 @@ class MultiSourceMarketService extends BaseMarketService
         return $result;
     }
 
-    /**
-     * Get Kline/candlestick data. Returns original-format array.
-     * CoinGecko OHLC is available but lower resolution — used as fallback.
-     */
     public function getKlines(string $symbol, string $interval = '1h', int $limit = 200): array
     {
-        $cacheKey = "market_klines_{$symbol}_{$interval}_{$limit}";
+        // 0. Input Hardening
+        $symbol = strtoupper($symbol);
+        $interval = preg_replace('/[^0-9a-z]/', '', $interval);
+        $limit = (int) $limit;
+        
+        $keyHash = md5("{$symbol}_{$interval}_{$limit}_v1");
+        $cacheKey = "market_klines_{$keyHash}";
         
         // Return cached value only if it's non-empty
         $cached = Cache::get($cacheKey);
@@ -362,7 +364,11 @@ class MultiSourceMarketService extends BaseMarketService
      */
     public function getRecentTrades(string $symbol, int $limit = 50): array
     {
-        $cacheKey = "market_trades_{$symbol}";
+        // 0. Input Hardening
+        $symbol = strtoupper($symbol);
+        $cleanSym = preg_replace('/[^A-Z0-9]/', '', $symbol);
+        $keyHash = md5($cleanSym . '_v1');
+        $cacheKey = "market_trades_{$keyHash}";
         
         $cached = Cache::get($cacheKey);
         if (!empty($cached)) {

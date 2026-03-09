@@ -337,7 +337,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Conditional logic for Crypto/Commodity vs Stocks/Forex
     if (ASSET_TYPE === 'crypto' || ASSET_TYPE === 'commodity') {
-        initSSE();
+        // initSSE(); // Deprecated
+        initWebSockets();
         initBinanceWS();
     } else {
         // For Stocks/Forex, hide crypto-only elements if they exist
@@ -712,90 +713,83 @@ function renderPrediction(data) {
 }
 
 // ─── SERVER-SENT EVENTS (SSE) STREAMING ─────────
-let sseSource = null;
-
+// Deprecated: Use initWebSockets instead
 function initSSE() {
-    if (sseSource) sseSource.close();
-    
-    // Connect to our new backend stream route, passing the selected interval
-    sseSource = new EventSource(`{{ url('/api/market/stream') }}?page=trading&symbol=${SYMBOL}&interval=${currentInterval}`);
-    
-    sseSource.onopen = () => {
-        setBadge('live', '🟢 SSE Connected');
-        document.getElementById('conn-dot')?.classList.remove('disconnected');
-        document.getElementById('conn-text') && (document.getElementById('conn-text').textContent = 'Connected');
-        document.getElementById('ws-status-text') && (document.getElementById('ws-status-text').textContent = 'Connected');
-    };
-    
-    sseSource.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
+    console.warn('initSSE is deprecated. Use initWebSockets.');
+}
+
+function initWebSockets() {
+    if (!window.Echo) {
+        console.error('Laravel Echo not found.');
+        return;
+    }
+
+    console.info(`[Trading] Subscribing to market.${SYMBOL} and market.all...`);
+
+    // Listen to specific symbol channel
+    window.Echo.channel(`market.${SYMBOL}`)
+        .listen('.updated', (e) => {
+            const data = e.data;
+            handleBroadcastData(data);
+        });
+
+    // Also listen to 'all' for shared components like Ticker Bar
+    window.Echo.channel('market.all')
+        .listen('.updated', (e) => {
+            const data = e.data;
             
-            // Real-time ticking is now handled separately by Binance WebSocket (initBinanceWS)
-            // so we don't process data.ticker here for chart ticking anymore.
-            
-            // 2. Update Order Book
-            if (data.depth) renderOrderBook(data.depth);
-            
-            // 3. Update Trades
-            if (data.trades) renderTrades(data.trades);
-            
-            // 4. Update Ticker Header
-            if (data.ticker) {
-                const headerPrice = document.querySelector('.header-price');
-                const headerChange = document.querySelector('.header-change');
-                if (headerPrice) headerPrice.textContent = '$' + formatPrice(parseFloat(data.ticker.lastPrice));
-                if (headerChange) {
-                    const c = parseFloat(data.ticker.priceChangePercent);
-                    headerChange.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(2)}%`;
-                    headerChange.className = `header-change ${c >= 0 ? 'text-success' : 'text-danger'}`;
-                }
-            }
-            
-            // 5. Update Watchlist and Ticker Bar (shared payload)
-            if (data.watchlist) renderWatchlist(data.watchlist);
-            if (data.top_pairs) {
-                if (typeof window.renderTickerBar === 'function') {
+            // If this 'all' broadcast is actually for our symbol, handle it
+            // (The command broadcasts same payload to both channels)
+            if (e.symbol === SYMBOL) {
+                handleBroadcastData(data);
+            } else {
+                // Just update shared components
+                if (data.watchlist) renderWatchlist(data.watchlist);
+                if (data.top_pairs && typeof window.renderTickerBar === 'function') {
                     window.renderTickerBar(data.top_pairs);
                 }
             }
-            
-            // 6. Update Prediction (Now uses MTF predictions map)
-            if (data.predictions) {
-                // Determine the correct prediction timeframe based on current chart interval
-                // By default, Trading page focuses on the short term, so we map '1m', '5m', '15m' to '15m' prediction
-                // '1h' to '1h' prediction, etc. 
-                let targetPrediction = data.predictions['15m'];
-                if (currentInterval === '1h') targetPrediction = data.predictions['1h'];
-                else if (currentInterval === '4h' || currentInterval === '1d') targetPrediction = data.predictions['4h'];
-                
-                if (targetPrediction) renderPrediction(targetPrediction);
-            }
-            
-        } catch (e) {
-            console.error('SSE JSON parsing error or Render Error', e, e.stack);
-            
-            // To visibly debug if it's failing inside renderPrediction:
-            const listEl = document.getElementById('indicator-list');
-            if(listEl) {
-                listEl.innerHTML = `<div class="text-danger" style="padding:10px">JS Render Error: ${e.message}</div>`;
-            }
-        }
-    };
+        });
+}
+
+function handleBroadcastData(data) {
+    // 1. Update Order Book
+    if (data.trading && data.trading.depth) renderOrderBook(data.trading.depth);
+    else if (data.depth) renderOrderBook(data.depth);
     
-    let reconnectTimeout = null;
-    sseSource.onerror = () => {
-        // SSE is now persistent. Only show offline if it hasn't reconnected after 5 seconds.
-        clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(() => {
-            if (sseSource.readyState !== EventSource.OPEN) {
-                setBadge('poll', '🟡 Reconnecting');
-                document.getElementById('conn-dot')?.classList.add('disconnected');
-                document.getElementById('conn-text') && (document.getElementById('conn-text').textContent = 'Offline');
-                document.getElementById('ws-status-text') && (document.getElementById('ws-status-text').textContent = 'Connection lost. Retrying...');
-            }
-        }, 5000);
-    };
+    // 2. Update Trades
+    if (data.trading && data.trading.trades) renderTrades(data.trading.trades);
+    else if (data.trades) renderTrades(data.trades);
+    
+    // 3. Update Ticker Header
+    if (data.trading && data.trading.ticker) {
+        const t = data.trading.ticker;
+        const headerPrice = document.querySelector('.header-price');
+        const headerChange = document.querySelector('.header-change');
+        if (headerPrice) headerPrice.textContent = '$' + formatPrice(parseFloat(t.lastPrice));
+        if (headerChange) {
+            const c = parseFloat(t.priceChangePercent);
+            headerChange.textContent = `${c >= 0 ? '+' : ''}${c.toFixed(2)}%`;
+            headerChange.className = `header-change ${c >= 0 ? 'text-success' : 'text-danger'}`;
+        }
+    }
+    
+    // 4. Update Shared Components
+    if (data.watchlist) renderWatchlist(data.watchlist);
+    if (data.top_pairs && typeof window.renderTickerBar === 'function') {
+        window.renderTickerBar(data.top_pairs);
+    }
+    
+    // 5. Update Prediction
+    if (data.trading && data.trading.prediction) {
+        renderPrediction(data.trading.prediction);
+    } else if (data.predictions) {
+        let targetPrediction = data.predictions['15m'];
+        if (currentInterval === '1h') targetPrediction = data.predictions['1h'];
+        else if (currentInterval === '4h' || currentInterval === '1d') targetPrediction = data.predictions['4h'];
+        
+        if (targetPrediction) renderPrediction(targetPrediction);
+    }
 }
 
 function setBadge(type, text) {

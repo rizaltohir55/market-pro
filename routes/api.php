@@ -13,7 +13,7 @@ Route::prefix('market')->middleware('throttle:market')->group(function () {
     Route::get('/top-pairs',      [MarketController::class, 'topPairs']);
     Route::get('/prediction',     [MarketController::class, 'prediction']);
     Route::get('/batch-predictions', [MarketController::class, 'batchPredictions']);
-    Route::get('/stream',         [\App\Http\Controllers\Api\StreamController::class, 'stream']);
+    // Route::get('/stream',         [\App\Http\Controllers\Api\StreamController::class, 'stream']); // Removed in favor of WebSockets
 
     // ─── Stocks / Global Markets ─────────────────────────────────────────────
     Route::get('/stocks',         [MarketController::class, 'stocks']);

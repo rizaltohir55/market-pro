@@ -468,8 +468,9 @@ document.addEventListener('DOMContentLoaded', function() {
     refreshScannerTable(); // Initial fast load
     loadSignalsForTopPairs();
 
-    // Transitioned to real-time Server-Sent Events (SSE)
-    initSSE();
+    // Transitioned to real-time WebSockets
+    // initSSE(); // Deprecated
+    initWebSockets();
 
     // Refresh button now updates data via API manually if user requests it
     document.getElementById('scanner-refresh')?.addEventListener('click', function() {
@@ -489,42 +490,37 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-let sseSource = null;
+// Deprecated: Use initWebSockets instead
 function initSSE() {
-    sseSource = new EventSource('{{ url('/api/market/stream') }}?page=scanner');
-    
-    sseSource.onopen = () => {
-        document.getElementById('conn-dot')?.classList.remove('disconnected');
-        if (document.getElementById('conn-text')) document.getElementById('conn-text').textContent = 'Connected (SSE)';
-        if (document.getElementById('ws-status-text')) document.getElementById('ws-status-text').textContent = 'Connected';
-    };
-    
-    sseSource.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
+    console.warn('initSSE is deprecated. Use initWebSockets.');
+}
+
+function initWebSockets() {
+    if (!window.Echo) {
+        console.error('Laravel Echo not found.');
+        return;
+    }
+
+    console.info('[Scanner] Subscribing to market.all...');
+
+    // In Scanner, we mainly care about 'market.all' which contains the global pairs list
+    window.Echo.channel('market.all')
+        .listen('.updated', (e) => {
+            const data = e.data;
             
             if (data.pairs) {
                 currentPairsData = data.pairs;
                 renderScannerTable();
             }
-            if (data.top_pairs) {
-                if (typeof window.renderTickerBar === 'function') {
-                    window.renderTickerBar(data.top_pairs);
-                }
+            if (data.top_pairs && typeof window.renderTickerBar === 'function') {
+                window.renderTickerBar(data.top_pairs);
             }
-            if (data.watchlist) {
-                if (typeof window.renderWatchlistFromSSE === 'function') {
-                    window.renderWatchlistFromSSE(data.watchlist);
-                }
+            if (data.watchlist && typeof window.renderWatchlistFromSSE === 'function') {
+                window.renderWatchlistFromSSE(data.watchlist);
             }
             
             if (window.updateLastUpdate) window.updateLastUpdate();
-        } catch(e) { console.error('SSE Error:', e); }
-    };
-    
-    sseSource.onerror = () => {
-        console.warn('SSE connection lost, reconnecting...');
-    };
+        });
 }
 
 function refreshScannerTable() {
