@@ -62,9 +62,9 @@ class StockMarketService extends BaseMarketService
             // ── Fallback: Stooq CSV (very reliable, no key) ───────────────
             try {
                 $stooqSym = strtolower($symbol) . '.us';
-                $r = Http::withOptions(['verify' => config('services.market.ca_cert'), 'curl' => [CURLOPT_FOLLOWLOCATION => true]])
+                $r = Http::withOptions($this->getHttpOptions(8))
                     ->withHeaders($this->browserHeaders())
-                    ->timeout(8)
+                    ->retry(3, 200)
                     ->get('https://stooq.com/q/l/', [
                         's' => $stooqSym,
                         'f' => 'sd2t2ohlcv',
@@ -262,9 +262,9 @@ class StockMarketService extends BaseMarketService
             $hosts = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
             foreach ($hosts as $host) {
                 try {
-                    $r = Http::withOptions(['verify'=>config('services.market.ca_cert'),'curl'=>[CURLOPT_FOLLOWLOCATION=>true]])
+                    $r = Http::withOptions($this->getHttpOptions(6))
                         ->withHeaders($this->browserHeaders())
-                        ->timeout(15)
+                        ->retry(2, 200)
                         ->get("$host/v7/finance/quote", [
                             'symbols' => implode(',', $symbols),
                         ]);
@@ -315,7 +315,8 @@ class StockMarketService extends BaseMarketService
                     $reqs = [];
                     foreach ($symbols as $sym) {
                         $reqs[] = $pool->as($sym)
-                            ->withOptions(['verify' => config('services.market.ca_cert')])
+                            ->withOptions($this->getHttpOptions(5))
+                            ->retry(2, 500)
                             ->get("https://query1.finance.yahoo.com/v8/finance/chart/" . urlencode($sym) . "?interval=1d&range=2d");
                     }
                     return $reqs;
@@ -352,17 +353,63 @@ class StockMarketService extends BaseMarketService
                 }
             }
             
-            // For any that failed in pool, try Stooq synchronously
+            // For any that failed in pool, try Stooq in another pool for speed
             $failedSymbols = array_diff($symbols, array_column($quotes, 'symbol'));
-            foreach ($failedSymbols as $sym) {
-                $q = $this->getStockQuote($sym); // Fallback to full method which tries Stooq
-                if (!empty($q) && $q['source'] === 'stooq') {
-                    $quotes[] = $q;
+            if (!empty($failedSymbols)) {
+                $stooqResponses = Http::pool(function (Pool $pool) use ($failedSymbols) {
+                    $stooqReqs = [];
+                    foreach ($failedSymbols as $sym) {
+                        $stooqSym = strtolower($sym) . '.us';
+                        $stooqReqs[] = $pool->as($sym)
+                            ->withOptions($this->getHttpOptions(5))
+                            ->withHeaders($this->browserHeaders())
+                            ->get('https://stooq.com/q/l/', [
+                                's' => $stooqSym,
+                                'f' => 'sd2t2ohlcv',
+                                'h' => '',
+                                'e' => 'csv',
+                            ]);
+                    }
+                    return $stooqReqs;
+                });
+
+                foreach ($stooqResponses as $sym => $sr) {
+                    if ($sr instanceof \Illuminate\Http\Client\Response && $sr->successful()) {
+                        $csv = $sr->body();
+                        $lines = array_filter(explode("\n", trim($csv)));
+                        if (count($lines) >= 2) {
+                            $v = array_map('trim', explode(',', $lines[1]));
+                            $headers = array_map('trim', explode(',', $lines[0]));
+                            $row = array_combine($headers, $v);
+                            $close = (float) ($row['Close'] ?? 0);
+                            if ($close > 0) {
+                                $open = (float) ($row['Open'] ?? $close);
+                                $change = $close - $open;
+                                $quotes[] = [
+                                    'symbol'     => strval($sym),
+                                    'name'       => strval($sym),
+                                    'price'      => $close,
+                                    'open'       => $open,
+                                    'high'       => (float) ($row['High'] ?? $close),
+                                    'low'        => (float) ($row['Low'] ?? $close),
+                                    'prev_close' => $open,
+                                    'change'     => round($change, 4),
+                                    'change_pct' => $open > 0 ? round(($change / $open) * 100, 4) : 0,
+                                    'volume'     => (int) ($row['Volume'] ?? 0),
+                                    'market_cap' => 0,
+                                    'currency'   => 'USD',
+                                    'exchange'   => 'US',
+                                    'timestamp'  => time(),
+                                    'source'     => 'stooq_pool',
+                                ];
+                            }
+                        }
+                    }
                 }
             }
             
-            Log::info('GlobalMarketService: Individual v8 pool fetching completed — ' . count($quotes) . '/' . count($symbols));
-            return $quotes;
+            Log::info('GlobalMarketService: Bulk fetching completed — ' . count($quotes) . '/' . count($symbols));
+            return array_values($quotes);
         }) ?? [];
     }
 
@@ -569,10 +616,15 @@ class StockMarketService extends BaseMarketService
                     $ch = curl_init($url);
                     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
-                    curl_setopt($ch, CURLOPT_CAINFO, config('services.market.ca_cert'));
+                    
+                    $verify = (bool) config('services.market.ca_cert', true);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verify ? 1 : 0);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verify ? 2 : 0);
+                    if ($verify) {
+                        curl_setopt($ch, CURLOPT_CAINFO, config('services.market.ca_cert'));
+                    }
                     curl_setopt($ch, CURLOPT_HTTPHEADER, array_values($this->browserHeaders()));
-                    curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 6);
                     $html = curl_exec($ch);
                     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                     curl_close($ch);

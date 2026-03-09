@@ -20,7 +20,7 @@ class PredictionService
         $symbol = strtoupper($symbol);
         $cacheKey = "prediction_v3_{$symbol}_{$interval}";
         
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function() use ($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending) {
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending) {
             return $this->calculateSignal($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending);
         });
     }
@@ -67,7 +67,7 @@ class PredictionService
             $signal = $this->calculateSignal($klines, $symbol, $interval, $htfKlines, 50, 1.0, false, $mlResult);
             
             $cacheKey = "prediction_v3_{$symbol}_{$interval}";
-            \Illuminate\Support\Facades\Cache::put($cacheKey, $signal, 60);
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $signal, 300);
             $batchResults[$symbol] = $signal;
         }
 

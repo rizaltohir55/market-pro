@@ -32,6 +32,25 @@ abstract class BaseMarketService
         'SGD' => 'USD/SGD',
         'IDR' => 'USD/IDR',
     ];
+    /**
+     * Centralized HTTP options for SSL resilience and consistent timeouts.
+     */
+    protected function getHttpOptions(int $timeout = 5): array
+    {
+        $verify = (bool) config('services.market.ca_cert', true);
+        
+        return [
+            'verify' => $verify,
+            'timeout' => $timeout,
+            'connect_timeout' => 3,
+            'curl' => [
+                CURLOPT_SSL_VERIFYPEER => $verify ? 1 : 0,
+                CURLOPT_SSL_VERIFYHOST => $verify ? 2 : 0,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]
+        ];
+    }
+
     /** Standard browser headers to authenticate Yahoo Finance requests */
     protected function browserHeaders(): array
     {
@@ -45,9 +64,9 @@ abstract class BaseMarketService
 
     protected function yahooGet(string $path, array $params = [])
     {
-        return Http::withOptions(['verify' => config('services.market.ca_cert'), 'curl' => [CURLOPT_FOLLOWLOCATION => true]])
+        return Http::withOptions($this->getHttpOptions(8))
             ->withHeaders($this->browserHeaders())
-            ->timeout(10)
+            ->retry(3, 100)
             ->get('https://query1.finance.yahoo.com' . $path, $params);
     }
 
@@ -59,15 +78,21 @@ abstract class BaseMarketService
     {
         $cacheKey = 'yahoo_crumb_cookie';
         $auth = Cache::remember($cacheKey, 3600, function () { // cache for 1 hour
+            $verify = (bool) config('services.market.ca_cert', true);
+            $caPath = config('services.market.ca_cert');
+
             try {
-                // 1. Get Cookie via raw cURL to avoid Laravel Http/Guzzle cookie drops
+                // 1. Get Cookie
                 $ch = curl_init('https://fc.yahoo.com');
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
                 curl_setopt($ch, CURLOPT_HEADER, 1);
-                curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
-                curl_setopt($ch, CURLOPT_CAINFO, config('services.market.ca_cert'));
-                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verify ? 1 : 0);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verify ? 2 : 0);
+                if ($verify && $caPath) {
+                    curl_setopt($ch, CURLOPT_CAINFO, $caPath);
+                }
+                curl_setopt($ch, CURLOPT_TIMEOUT, 6);
                 $res = curl_exec($ch);
                 $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
                 $header = substr($res, 0, $headerSize);
@@ -82,21 +107,20 @@ abstract class BaseMarketService
                 $cookieStr = '';
                 foreach ($cookies as $k => $v) { $cookieStr .= "$k=$v; "; }
                 
-                Log::info('yahooGetWithCrumb: Parsed Cookie: ' . $cookieStr);
-                
                 // 2. Get Crumb
                 $ch2 = curl_init('https://query1.finance.yahoo.com/v1/test/getcrumb');
                 curl_setopt($ch2, CURLOPT_RETURNTRANSFER, 1);
                 curl_setopt($ch2, CURLOPT_HTTPHEADER, ["Cookie: $cookieStr"]);
-                curl_setopt($ch2, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-                curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, 1);
-                curl_setopt($ch2, CURLOPT_CAINFO, config('services.market.ca_cert'));
-                curl_setopt($ch2, CURLOPT_TIMEOUT, 10);
+                curl_setopt($ch2, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+                curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, $verify ? 1 : 0);
+                curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, $verify ? 2 : 0);
+                if ($verify && $caPath) {
+                    curl_setopt($ch2, CURLOPT_CAINFO, $caPath);
+                }
+                curl_setopt($ch2, CURLOPT_TIMEOUT, 6);
                 $crumb = curl_exec($ch2);
                 $status = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
                 curl_close($ch2);
-                    
-                Log::info('yahooGetWithCrumb: getcrumb status: ' . $status . ' body: ' . rtrim($crumb));
                     
                 if ($status == 200 && !empty($crumb)) {
                     return ['cookie' => $cookieStr, 'crumb' => rtrim($crumb)];
@@ -131,11 +155,16 @@ abstract class BaseMarketService
         foreach ($headers as $k => $v) {
             $headerArray[] = "$k: $v";
         }
+        
+        $verify = (bool) config('services.market.ca_cert', true);
         curl_setopt($ch3, CURLOPT_HTTPHEADER, $headerArray);
         curl_setopt($ch3, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-        curl_setopt($ch3, CURLOPT_SSL_VERIFYPEER, 1);
-        curl_setopt($ch3, CURLOPT_CAINFO, config('services.market.ca_cert'));
-        curl_setopt($ch3, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch3, CURLOPT_SSL_VERIFYPEER, $verify ? 1 : 0);
+        curl_setopt($ch3, CURLOPT_SSL_VERIFYHOST, $verify ? 2 : 0);
+        if ($verify) {
+            curl_setopt($ch3, CURLOPT_CAINFO, config('services.market.ca_cert'));
+        }
+        curl_setopt($ch3, CURLOPT_TIMEOUT, 8);
         curl_setopt($ch3, CURLOPT_FOLLOWLOCATION, 1);
         $data = curl_exec($ch3);
         $status = curl_getinfo($ch3, CURLINFO_HTTP_CODE);
@@ -158,12 +187,16 @@ abstract class BaseMarketService
         if (empty($key) || $key === 'your_finnhub_api_key_here') {
             return null;
         }
-        $response = Http::withOptions(['verify' => false]) // Bypass SSL for local dev issues
+        $options = $this->getHttpOptions(15);
+        // Finnhub sometimes has issues with CA bundles on local machines
+        // If verify is false in general, it will be false here too.
+        
+        $response = Http::withOptions($options)
             ->withHeaders([
                 'User-Agent'      => 'Mozilla/5.0 Chrome/120',
                 'X-Finnhub-Token' => $key,
             ])
-            ->timeout(20)
+            ->retry(3, 200)
             ->get($this->finnhubBase . $path, $params);
             
         if ($response && $response->status() === 429) {
@@ -175,28 +208,28 @@ abstract class BaseMarketService
 
     protected function exchangeRateGet(string $path, array $params = [])
     {
-        return Http::withOptions(['verify' => config('services.market.ca_cert')])
+        return Http::withOptions($this->getHttpOptions(8))
             ->withHeaders([
                 'Accept'     => 'application/json',
                 'User-Agent' => 'Mozilla/5.0 Chrome/120',
             ])
-            ->timeout(10)
+            ->retry(3, 100)
             ->get($this->exchangeRateBase . $path, $params);
     }
 
     protected function okxGet(string $path, array $params = [])
     {
-        return Http::withOptions(['verify' => config('services.market.ca_cert')])
+        return Http::withOptions($this->getHttpOptions(8))
             ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
-            ->timeout(8)
+            ->retry(3, 100)
             ->get($this->okxBase . $path, $params);
     }
 
     protected function binanceGet(string $path, array $params = [])
     {
-        return Http::withOptions(['verify' => config('services.market.ca_cert')])
+        return Http::withOptions($this->getHttpOptions(8))
             ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
-            ->timeout(8)
+            ->retry(3, 100)
             ->get($this->binanceBase . $path, $params);
     }
 }

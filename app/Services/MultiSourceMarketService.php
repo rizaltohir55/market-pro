@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
  *
  * All public APIs — zero configuration needed.
  */
-class MultiSourceMarketService
+class MultiSourceMarketService extends BaseMarketService
 {
     /**
      * Ordered list of Binance-compatible endpoints to try.
@@ -63,18 +63,19 @@ class MultiSourceMarketService
         }
 
         $cacert = config('services.market.ca_cert');
-        $verify = file_exists($cacert) ? $cacert : true;
+        
+        // If it's a string, check if it exists. If it's boolean true or missing, use true (default bundle).
+        $verify = (is_string($cacert) && file_exists($cacert)) ? $cacert : (is_bool($cacert) ? $cacert : true);
 
         try {
             // Ping all endpoints in parallel to find the fastest responder
-            // Total maximum delay is now 2 seconds instead of N * timeout
-            $responses = Http::pool(function (Pool $pool) use ($verify) {
+            $responses = Http::pool(function (Pool $pool) {
                 $reqs = [];
                 foreach ($this->binanceEndpoints as $base) {
                     $reqs[] = $pool->as($base)
-                        ->withOptions(['verify' => $verify])
+                        ->withOptions($this->getHttpOptions(2))
                         ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
-                        ->timeout(2)
+                        ->retry(2, 50)
                         ->get($base . '/api/v3/ping');
                 }
                 return $reqs;
@@ -99,27 +100,28 @@ class MultiSourceMarketService
 
     // ─── HTTP HELPERS ────────────────────────────────────────────────────────
 
-    private function binanceGet(string $path, array $params = [])
+    protected function binanceGet(string $path, array $params = [])
     {
         $base = $this->getWorkingBinanceBase();
-        return Http::withOptions([
-                'verify' => config('services.market.ca_cert'),
-            ])
+        $cacert = config('services.market.ca_cert');
+        $verify = (is_string($cacert) && file_exists($cacert)) ? $cacert : (is_bool($cacert) ? $cacert : true);
+
+        return Http::withOptions($this->getHttpOptions(5))
             ->withHeaders(['User-Agent' => 'Mozilla/5.0 Chrome/120'])
-            ->timeout(10)
+            ->retry(3, 100)
             ->get($base . $path, $params);
     }
 
     private function coinGeckoGet(string $path, array $params = [])
     {
-        return Http::withOptions([
-                'verify' => config('services.market.ca_cert'),
-            ])
+        $cacert = config('services.market.ca_cert');
+        $verify = (is_string($cacert) && file_exists($cacert)) ? $cacert : (is_bool($cacert) ? $cacert : true);
+
+        return Http::withOptions($this->getHttpOptions(8))
             ->withHeaders([
                 'Accept'     => 'application/json',
                 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
             ])
-            ->timeout(12)
             ->retry(2, 500)
             ->get($this->coinGeckoUrl . $path, $params);
     }
@@ -177,8 +179,37 @@ class MultiSourceMarketService
 
                         if ($symbol) {
                             $symUpper = strtoupper($symbol);
-                            $filtered = array_filter($tickers, fn($t) => $t['symbol'] === $symUpper);
-                            return array_values($filtered)[0] ?? [];
+                            // CoinGecko normalized symbol might be just 'BTC', we check if it matches $symUpper or $symUpper without 'USDT'
+                            $filtered = array_filter($tickers, function($t) use ($symUpper) {
+                                return $t['symbol'] === $symUpper || $t['symbol'] === str_replace('USDT', '', $symUpper);
+                            });
+                            $found = array_values($filtered)[0] ?? null;
+
+                            if ($found) {
+                                $found['symbol'] = $symUpper; // Ensure it returns the requested format
+                                return $found;
+                            }
+
+                            // If not found in bulk list, try specific ID if mapped
+                            $coinId = $this->coinGeckoIds[$symUpper] ?? null;
+                            if ($coinId) {
+                                $singleRes = $this->coinGeckoGet("/coins/$coinId", ['localization' => false, 'tickers' => false, 'market_data' => true, 'community_data' => false, 'developer_data' => false, 'sparkline' => false]);
+                                if ($singleRes->successful()) {
+                                    $c = $singleRes->json();
+                                    $md = $c['market_data'] ?? [];
+                                    return [
+                                        'symbol'             => $symUpper,
+                                        'lastPrice'          => (string)($md['current_price']['usd'] ?? 0),
+                                        'priceChangePercent' => (string)($md['price_change_percentage_24h'] ?? 0),
+                                        'highPrice'          => (string)($md['high_24h']['usd'] ?? 0),
+                                        'lowPrice'           => (string)($md['low_24h']['usd'] ?? 0),
+                                        'volume'             => (string)($md['total_volume']['usd'] ?? 0),
+                                        'quoteVolume'        => (string)($md['total_volume']['usd'] ?? 0),
+                                        'count'              => 0,
+                                    ];
+                                }
+                            }
+                            return [];
                         }
                         return $tickers;
                     }
@@ -511,7 +542,7 @@ class MultiSourceMarketService
 
         $result = (function () {
             try {
-                $res = Http::timeout(8)->get('https://api.coingecko.com/api/v3/search/trending');
+                $res = Http::timeout(8)->retry(3, 200)->get('https://api.coingecko.com/api/v3/search/trending');
                 if ($res->successful()) {
                     $json = $res->json();
                     if (isset($json['coins']) && is_array($json['coins'])) {

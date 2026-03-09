@@ -37,7 +37,7 @@ return [
 
     // ─── Market Data APIs ─────────────────────────────────────────────────────
     'market' => [
-        'ca_cert' => storage_path('cacert.pem'),
+        'ca_cert' => env('MARKET_CA_CERT', true),
     ],
 
     'finnhub' => [
@@ -46,6 +46,11 @@ return [
 
     'alphavantage' => [
         'key' => env('ALPHA_VANTAGE_API_KEY'),
+    ],
+    
+    'ml' => [
+        'url' => env('ML_SERVICE_URL'),
+        'key' => env('ML_SERVICE_KEY'),
     ],
 
 ];

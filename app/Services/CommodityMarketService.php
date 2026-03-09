@@ -98,9 +98,9 @@ class CommodityMarketService extends BaseMarketService
         // Fallback: CoinGecko silver
         if (!$silverFetched) {
             try {
-                $r = Http::withOptions(['verify' => config('services.market.ca_cert')])
+                $r = Http::withOptions($this->getHttpOptions(10))
                     ->withHeaders(['Accept' => 'application/json', 'User-Agent' => 'Mozilla/5.0 Chrome/120'])
-                    ->timeout(10)
+                    ->retry(3, 200)
                     ->get('https://api.coingecko.com/api/v3/simple/price', [
                         'ids'              => 'silver,tether-gold',
                         'vs_currencies'    => 'usd',

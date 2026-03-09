@@ -9,14 +9,37 @@ class MachineLearningService
      */
     public function predictXGBoost(array $klines, int $forecastSteps = 5): array
     {
-        $input = [
-            'klines' => $klines,
-            'steps'  => $forecastSteps
-        ];
+        $modelDir = storage_path('app/ml_models');
+        if (!file_exists($modelDir)) {
+            mkdir($modelDir, 0755, true);
+        }
 
-        $jsonInput = json_encode($input);
+        $inputData = [
+            'klines' => $klines,
+            'steps'  => $forecastSteps,
+            'model_dir' => $modelDir
+        ];
         
-        // Define path to python script
+        // 1. Check for Microservice HTTP call
+        $mlUrl = config('services.ml.url');
+        if ($mlUrl) {
+            try {
+                $response = \Illuminate\Support\Facades\Http::withHeaders([
+                    'X-ML-Key' => config('services.ml.key'),
+                ])->timeout(30)->post($mlUrl . '/predict', $inputData);
+                
+                if ($response->successful()) {
+                    return $response->json();
+                }
+                \Illuminate\Support\Facades\Log::warning("ML Service HTTP failed: " . $response->status());
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning("ML Service HTTP exception: " . $e->getMessage());
+            }
+        }
+
+        $jsonInput = json_encode($inputData);
+        
+        // 2. Fallback to Local proc_open
         $scriptPath = base_path('app/ML/xgboost_engine.py');
         
         // Using proc_open for safer execution and reading stdout/stderr
@@ -28,7 +51,8 @@ class MachineLearningService
 
         // Ensure we use the correct python command (python or python3)
         // Hardened: using array-based command to prevent injection
-        $process = proc_open(['python', $scriptPath], $descriptorspec, $pipes);
+        $python = $this->getPythonCommand();
+        $process = proc_open([$python, $scriptPath], $descriptorspec, $pipes);
 
         if (is_resource($process)) {
             fwrite($pipes[0], $jsonInput);
@@ -43,7 +67,15 @@ class MachineLearningService
             $returnValue = proc_close($process);
 
             if ($returnValue === 0) {
-                $output = json_decode($stdout, true);
+                $output = $this->extractJson($stdout);
+                if (!$output) {
+                    return [
+                        'error' => "Failed to parse JSON from Python output. Raw: " . substr($stdout, 0, 500),
+                        'forecast' => [],
+                        'r_squared' => 0
+                    ];
+                }
+                
                 if (isset($output['error'])) {
                     return ['error' => $output['error'], 'forecast' => [], 'r_squared' => 0];
                 }
@@ -65,12 +97,35 @@ class MachineLearningService
      */
     public function predictBatchXGBoost(array $batchInput, int $forecastSteps = 5): array
     {
-        $input = [
+        $modelDir = storage_path('app/ml_models');
+        if (!file_exists($modelDir)) {
+            mkdir($modelDir, 0755, true);
+        }
+
+        $inputData = [
             'batch' => $batchInput,
-            'steps' => $forecastSteps
+            'steps' => $forecastSteps,
+            'model_dir' => $modelDir
         ];
 
-        $jsonInput = json_encode($input);
+        // 1. Check for Microservice HTTP call
+        $mlUrl = config('services.ml.url');
+        if ($mlUrl) {
+            try {
+                $response = \Illuminate\Support\Facades\Http::withHeaders([
+                    'X-ML-Key' => config('services.ml.key'),
+                ])->timeout(60)->post($mlUrl . '/predict/batch', $inputData);
+                
+                if ($response->successful()) {
+                    return $response->json();
+                }
+                \Illuminate\Support\Facades\Log::warning("ML Service Batch HTTP failed: " . $response->status());
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning("ML Service Batch HTTP exception: " . $e->getMessage());
+            }
+        }
+
+        $jsonInput = json_encode($inputData);
         $scriptPath = base_path('app/ML/xgboost_engine.py');
         
         $descriptorspec = [
@@ -80,7 +135,9 @@ class MachineLearningService
         ];
 
         // Hardened: using array-based command to prevent injection
-        $process = proc_open(['python', $scriptPath], $descriptorspec, $pipes);
+        // Hardened: using array-based command to prevent injection
+        $python = $this->getPythonCommand();
+        $process = proc_open([$python, $scriptPath], $descriptorspec, $pipes);
 
         if (is_resource($process)) {
             fwrite($pipes[0], $jsonInput);
@@ -95,7 +152,7 @@ class MachineLearningService
             $returnValue = proc_close($process);
 
             if ($returnValue === 0) {
-                return json_decode($stdout, true) ?? ['error' => 'Invalid JSON output from Python'];
+                return $this->extractJson($stdout) ?? ['error' => 'Invalid JSON output from Python. Raw: ' . substr($stdout, 0, 200)];
             } else {
                 return ['error' => "Batch process failed. Stderr: {$stderr}"];
             }
@@ -203,5 +260,75 @@ class MachineLearningService
         $u2 = (float)mt_rand() / (float)mt_getrandmax();
         
         return sqrt(-2.0 * log($u1)) * cos(2.0 * M_PI * $u2);
+    }
+
+    /**
+     * Extracts the first valid JSON object or array from a string.
+     * Prevents issues where Python warnings pollute stdout.
+     */
+    private function extractJson(string $input): ?array
+    {
+        $input = trim($input);
+        
+        // Try direct decode first
+        $decoded = json_decode($input, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            return $decoded;
+        }
+
+        // Search for JSON structure if direct decode fails
+        // Finds first { or [ and last } or ]
+        $firstBrace = strpos($input, '{');
+        $firstBracket = strpos($input, '[');
+        
+        $startPos = false;
+        if ($firstBrace !== false && ($firstBracket === false || $firstBrace < $firstBracket)) {
+            $startPos = $firstBrace;
+            $endChar = '}';
+        } elseif ($firstBracket !== false) {
+            $startPos = $firstBracket;
+            $endChar = ']';
+        }
+
+        if ($startPos !== false) {
+            $lastPos = strrpos($input, $endChar);
+            if ($lastPos !== false && $lastPos > $startPos) {
+                $jsonString = substr($input, $startPos, $lastPos - $startPos + 1);
+                $decoded = json_decode($jsonString, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    return $decoded;
+                }
+            }
+        }
+
+        \Illuminate\Support\Facades\Log::error("ML Service: Robust JSON parsing failed. Original input length: " . strlen($input));
+        return null;
+    }
+
+    /**
+     * Detect the available Python command in the environment.
+     */
+    private function getPythonCommand(): string
+    {
+        static $cachedCommand = null;
+        if ($cachedCommand !== null) return $cachedCommand;
+
+        // Priority list: python3.13 (found in tasklist), python3, python
+        $commands = ['python3.13', 'python3', 'python'];
+        
+        foreach ($commands as $cmd) {
+            $check = PHP_OS_FAMILY === 'Windows' ? "where $cmd" : "which $cmd";
+            $output = [];
+            $returnVar = 0;
+            exec($check . ' 2>&1', $output, $returnVar);
+            
+            if ($returnVar === 0 && !empty($output)) {
+                $cachedCommand = $cmd;
+                return $cmd;
+            }
+        }
+
+        $cachedCommand = 'python'; // Default fallback
+        return 'python';
     }
 }

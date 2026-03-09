@@ -785,8 +785,7 @@ function initSSE() {
     
     let reconnectTimeout = null;
     sseSource.onerror = () => {
-        // SSE drops every 3s by design on our backend.
-        // Only show offline if it hasn't reconnected after 5 seconds.
+        // SSE is now persistent. Only show offline if it hasn't reconnected after 5 seconds.
         clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
             if (sseSource.readyState !== EventSource.OPEN) {

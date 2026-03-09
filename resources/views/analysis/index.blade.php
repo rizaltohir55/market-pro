@@ -212,7 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initAnalysisChart();
     initWatchlist();
 
-    // Start Real-Time Server-Sent Events Stream
+    // Start persistent Real-Time Server-Sent Events Stream
     initSSE();
     initBinanceWS();
 });

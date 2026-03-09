@@ -3,8 +3,7 @@
 use App\Http\Controllers\Api\MarketController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('market')->group(function () {
-
+Route::prefix('market')->middleware('throttle:market')->group(function () {
     // ─── Crypto ──────────────────────────────────────────────────────────────
     Route::get('/ticker',         [MarketController::class, 'ticker']);
     Route::get('/klines',         [MarketController::class, 'klines']);

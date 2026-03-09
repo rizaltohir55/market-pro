@@ -12,6 +12,9 @@ use App\Services\CryptoMarketService;
 use App\Services\NewsMarketService;
 use App\Services\PredictionService;
 use App\Services\EconomicCalendarService;
+use App\Http\Requests\MarketRequest;
+use App\Http\Requests\BatchPredictionRequest;
+use App\Http\Requests\TerminalRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -19,14 +22,14 @@ class MarketController extends Controller
 {
     // ─── CRYPTO ───────────────────────────────────────────────────────────────
 
-    public function ticker(Request $request, MultiSourceMarketService $market): JsonResponse
+    public function ticker(MarketRequest $request, MultiSourceMarketService $market): JsonResponse
     {
         $symbol = $request->get('symbol');
         $data   = $market->getTicker24hr($symbol);
         return response()->json($data);
     }
 
-    public function klines(Request $request, MultiSourceMarketService $market): JsonResponse
+    public function klines(MarketRequest $request, MultiSourceMarketService $market): JsonResponse
     {
         $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval = $request->get('interval', '1h');
@@ -36,7 +39,7 @@ class MarketController extends Controller
         return response()->json($data);
     }
 
-    public function depth(Request $request, MultiSourceMarketService $market): JsonResponse
+    public function depth(MarketRequest $request, MultiSourceMarketService $market): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'BTCUSDT'));
         $limit  = max(1, min((int) $request->get('limit', 20), 100));
@@ -45,7 +48,7 @@ class MarketController extends Controller
         return response()->json($data);
     }
 
-    public function trades(Request $request, MultiSourceMarketService $market): JsonResponse
+    public function trades(MarketRequest $request, MultiSourceMarketService $market): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'BTCUSDT'));
         $limit  = max(1, min((int) $request->get('limit', 50), 100));
@@ -60,22 +63,26 @@ class MarketController extends Controller
         return response()->json($data);
     }
 
-    public function prediction(Request $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
+    public function prediction(MarketRequest $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
     {
         $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval = $request->get('interval', '15m');
-        $klines   = $market->getKlines($symbol, $interval, 200);
+        $klines   = $market->getKlines($symbol, $interval, 1000);
         $signal   = $prediction->getScalpingSignal($klines, $symbol, $interval);
         return response()->json($signal);
     }
 
-    public function batchPredictions(Request $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
+    public function batchPredictions(BatchPredictionRequest $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
     {
         $symbols  = $request->get('symbols', []);
         $interval = $request->get('interval', '15m');
         
         if (is_string($symbols)) {
             $symbols = explode(',', $symbols);
+        }
+
+        if (!is_array($symbols)) {
+            $symbols = [];
         }
 
         $symbols = array_slice(array_filter(array_map(function($s) {
@@ -85,7 +92,7 @@ class MarketController extends Controller
         $batchKlines = [];
         foreach ($symbols as $symbol) {
             $batchKlines[strtoupper($symbol)] = [
-                'klines' => $market->getKlines($symbol, $interval, 200)
+                'klines' => $market->getKlines($symbol, $interval, 1000)
             ];
         }
 
@@ -100,6 +107,14 @@ class MarketController extends Controller
      */
     public function klinesHistory(Request $request, CryptoMarketService $cryptoMarket): JsonResponse
     {
+        $request->validate([
+            'symbol'   => 'nullable|string|max:20',
+            'interval' => 'nullable|string|max:10',
+            'limit'    => 'nullable|integer|min:1|max:1000',
+            'from'     => 'nullable|integer',
+            'to'       => 'nullable|integer',
+        ]);
+
         $symbol    = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval  = $request->get('interval', '1d');
         $limit     = max(1, min((int) $request->get('limit', 365), 1000));
@@ -125,7 +140,7 @@ class MarketController extends Controller
     /**
      * Get real-time quote for a single stock symbol.
      */
-    public function stockQuote(Request $request, StockMarketService $stockMarket): JsonResponse
+    public function stockQuote(MarketRequest $request, StockMarketService $stockMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $data   = $stockMarket->getStockQuote($symbol);
@@ -136,7 +151,7 @@ class MarketController extends Controller
      * Get company profile + fundamental data for a stock.
      * Returns: name, exchange, industry, market_cap, PE, EPS, ROE, margins, etc.
      */
-    public function stockProfile(Request $request, StockMarketService $stockMarket): JsonResponse
+    public function stockProfile(MarketRequest $request, StockMarketService $stockMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $data   = $stockMarket->getStockProfile($symbol);
@@ -147,7 +162,7 @@ class MarketController extends Controller
      * Get stock OHLCV candles from Finnhub.
      * ?symbol=AAPL&resolution=D&from=UNIX_TS&to=UNIX_TS
      */
-    public function stockCandles(Request $request, StockMarketService $stockMarket): JsonResponse
+    public function stockCandles(MarketRequest $request, StockMarketService $stockMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $res    = $request->get('resolution', 'D');
@@ -183,7 +198,7 @@ class MarketController extends Controller
      * Get forex historical rates for a currency.
      * ?currency=EUR&days=30
      */
-    public function forexHistory(Request $request, ForexMarketService $forexMarket): JsonResponse
+    public function forexHistory(MarketRequest $request, ForexMarketService $forexMarket): JsonResponse
     {
         $currency = strtoupper($request->get('currency', 'EUR'));
         $days     = max(1, min((int) $request->get('days', 30), 365));
@@ -216,21 +231,21 @@ class MarketController extends Controller
 
     // ─── NEW MARKET FEATURES ──────────────────────────────────────────────────
 
-    public function equityValuation(Request $request, StockMarketService $stockMarket): JsonResponse
+    public function equityValuation(MarketRequest $request, StockMarketService $stockMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $data   = $stockMarket->getEquityValuation($symbol);
         return response()->json($data);
     }
 
-    public function analystEstimates(Request $request, StockMarketService $stockMarket): JsonResponse
+    public function analystEstimates(MarketRequest $request, StockMarketService $stockMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $data   = $stockMarket->getAnalystEstimates($symbol);
         return response()->json($data);
     }
 
-    public function peerComparison(Request $request, StockMarketService $stockMarket): JsonResponse
+    public function peerComparison(MarketRequest $request, StockMarketService $stockMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $peersMap = [
@@ -255,7 +270,7 @@ class MarketController extends Controller
         return response()->json($data);
     }
 
-    public function optionsChain(Request $request, StockMarketService $stockMarket): JsonResponse
+    public function optionsChain(MarketRequest $request, StockMarketService $stockMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $expiry = $request->get('expiry', '');
@@ -277,7 +292,7 @@ class MarketController extends Controller
 
     // ─── TERMINAL COMMANDS ───────────────────────────────────────────────────
 
-    public function terminal(Request $request, StockMarketService $stockMarket, NewsMarketService $newsMarket): JsonResponse
+    public function terminal(TerminalRequest $request, StockMarketService $stockMarket, NewsMarketService $newsMarket): JsonResponse
     {
         $cmd   = strtolower($request->get('command', ''));
         $query = strtoupper($request->get('query', ''));
@@ -314,13 +329,28 @@ class MarketController extends Controller
                     $score = 'BB';
                     $outlook = 'Stable';
                     if (!empty($val['ratios'])) {
-                        $ro = $val['ratios'];
+                        $ro = $val['ratios'] ?? [];
                         $pts = 0;
-                        if (($ro['gross_margin'] ?? 0) > 30) $pts++;
-                        if (($ro['net_margin'] ?? 0) > 10) $pts++;
-                        if (($ro['current_ratio'] ?? 0) > 1.5) $pts++;
-                        if (($ro['debt_equity'] ?? 100) < 50) $pts++;
-                        if (($ro['roe'] ?? 0) > 15) $pts++;
+                        
+                        // Gross Margin Check
+                        $gm = (float) ($ro['gross_margin'] ?? ($val['valuation']['gross_margin'] ?? 0));
+                        if ($gm > 30) $pts++;
+                        
+                        // Net Margin Check
+                        $nm = (float) ($ro['net_margin'] ?? ($val['valuation']['net_margin'] ?? 0));
+                        if ($nm > 10) $pts++;
+                        
+                        // Current Ratio Check
+                        $cr = (float) ($ro['current_ratio'] ?? ($val['valuation']['current_ratio'] ?? 0));
+                        if ($cr > 1.5) $pts++;
+                        
+                        // Debt to Equity Check
+                        $de = (float) ($ro['debt_equity'] ?? ($val['valuation']['debt_equity'] ?? 100));
+                        if ($de < 50) $pts++;
+                        
+                        // ROE Check
+                        $roe = (float) ($ro['roe'] ?? ($val['valuation']['roe'] ?? 0));
+                        if ($roe > 15) $pts++;
                         
                         $map = [0 => 'C', 1 => 'B', 2 => 'BB', 3 => 'BBB', 4 => 'A', 5 => 'AA'];
                         $score = $map[$pts] ?? 'BB';
@@ -369,7 +399,7 @@ class MarketController extends Controller
      * Get company-specific news from Finnhub.
      * ?symbol=AAPL&days=7
      */
-    public function companyNews(Request $request, NewsMarketService $newsMarket): JsonResponse
+    public function companyNews(MarketRequest $request, NewsMarketService $newsMarket): JsonResponse
     {
         $symbol = strtoupper($request->get('symbol', 'AAPL'));
         $days   = max(1, min((int) $request->get('days', 7), 30));
@@ -380,7 +410,7 @@ class MarketController extends Controller
     /**
      * Get global economic calendar.
      */
-    public function economicCalendar(Request $request, EconomicCalendarService $calendar): JsonResponse
+    public function economicCalendar(MarketRequest $request, EconomicCalendarService $calendar): JsonResponse
     {
         $from = $request->get('from');
         $to   = $request->get('to');

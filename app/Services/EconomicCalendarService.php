@@ -17,8 +17,8 @@ class EconomicCalendarService extends BaseMarketService
         return Cache::remember('economic_calendar_ff_v1', 3600, function () {
             try {
                 // ForexFactory Weekly Calendar XML
-                $response = Http::withOptions(['verify' => false])
-                    ->timeout(15)
+                $response = Http::withOptions($this->getHttpOptions(15))
+                    ->retry(3, 200)
                     ->get('https://nfs.faireconomy.media/ff_calendar_thisweek.xml');
 
                 if (!$response->successful()) {

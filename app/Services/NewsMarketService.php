@@ -33,7 +33,7 @@ class NewsMarketService extends BaseMarketService
 
         $articles = Cache::remember($cacheKey, 300, function () use ($url, $category, $limit) {
             try {
-                $r = Http::withOptions(['verify' => config('services.market.ca_cert')])->timeout(10)->get($url);
+                $r = Http::withOptions($this->getHttpOptions(10))->retry(3, 200)->get($url);
                 if ($r && $r->successful()) {
                     $xml = simplexml_load_string($r->body());
                     if ($xml && isset($xml->channel->item)) {

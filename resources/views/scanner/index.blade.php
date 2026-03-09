@@ -468,7 +468,7 @@ document.addEventListener('DOMContentLoaded', function() {
     refreshScannerTable(); // Initial fast load
     loadSignalsForTopPairs();
 
-    // Replaced intervals with Server-Sent Events (SSE)
+    // Transitioned to real-time Server-Sent Events (SSE)
     initSSE();
 
     // Refresh button now updates data via API manually if user requests it
