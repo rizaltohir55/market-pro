@@ -94,8 +94,12 @@ class MultiSourceMarketService extends BaseMarketService
             Log::warning('MarketService: Binance pool ping exception: ' . $e->getMessage());
         }
 
-        Log::warning('MarketService: No Binance endpoint reachable. Returning fallback without caching.');
-        return $this->binanceEndpoints[0]; 
+        Log::warning('MarketService: No Binance endpoint reachable. Returning fallback.');
+        
+        $fallback = $this->binanceEndpoints[0];
+        Cache::put($cacheKey, $fallback, 60); // Cache the fallback for 1 minute to avoid hammering
+
+        return $fallback; 
     }
 
     // ─── HTTP HELPERS ────────────────────────────────────────────────────────

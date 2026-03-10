@@ -116,7 +116,8 @@ class DashboardController extends Controller
             $ticker = $market->getTicker24hr($cleanSymbol);
         } elseif ($type === 'forex') {
             $rates = $forexMarket->getForexRates();
-            $cur = str_replace(['/', 'USD'], '', reset((explode(':', $symbol))));
+            $parts = explode(':', $symbol);
+            $cur = str_replace(['/', 'USD'], '', $parts[0]);
             if (empty($cur)) $cur = $cleanSymbol;
             
             if (isset($rates['rates'][$cur])) {

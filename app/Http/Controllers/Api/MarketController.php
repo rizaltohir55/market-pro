@@ -333,23 +333,23 @@ class MarketController extends Controller
                         $pts = 0;
                         
                         // Gross Margin Check
-                        $gm = (float) ($ro['gross_margin'] ?? ($val['valuation']['gross_margin'] ?? 0));
+                        $gm = (float) ($ro['gross_margin'] ?? data_get($val, 'valuation.gross_margin', 0));
                         if ($gm > 30) $pts++;
                         
                         // Net Margin Check
-                        $nm = (float) ($ro['net_margin'] ?? ($val['valuation']['net_margin'] ?? 0));
+                        $nm = (float) ($ro['net_margin'] ?? data_get($val, 'valuation.net_margin', 0));
                         if ($nm > 10) $pts++;
                         
                         // Current Ratio Check
-                        $cr = (float) ($ro['current_ratio'] ?? ($val['valuation']['current_ratio'] ?? 0));
+                        $cr = (float) ($ro['current_ratio'] ?? data_get($val, 'valuation.current_ratio', 0));
                         if ($cr > 1.5) $pts++;
                         
                         // Debt to Equity Check
-                        $de = (float) ($ro['debt_equity'] ?? ($val['valuation']['debt_equity'] ?? 100));
+                        $de = (float) ($ro['debt_equity'] ?? data_get($val, 'valuation.debt_equity', 100));
                         if ($de < 50) $pts++;
                         
                         // ROE Check
-                        $roe = (float) ($ro['roe'] ?? ($val['valuation']['roe'] ?? 0));
+                        $roe = (float) ($ro['roe'] ?? data_get($val, 'valuation.roe', 0));
                         if ($roe > 15) $pts++;
                         
                         $map = [0 => 'C', 1 => 'B', 2 => 'BB', 3 => 'BBB', 4 => 'A', 5 => 'AA'];
@@ -462,6 +462,9 @@ class MarketController extends Controller
             return response()->json(['status' => 'removed']);
         }
 
+        $ts = (int) $request->input('datetime');
+        if ($ts > 2000000000) { $ts = (int) ($ts / 1000); }
+
         \App\Models\SavedArticle::create([
             'user_id'      => $userId,
             'article_id'   => $request->input('id'),
@@ -471,9 +474,7 @@ class MarketController extends Controller
             'url'          => $url,
             'image'        => $request->input('image'),
             'category'     => $request->input('category'),
-            'published_at' => $request->input('datetime')
-                                ? date('Y-m-d H:i:s', (int) $request->input('datetime'))
-                                : null,
+            'published_at' => $ts ? date('Y-m-d H:i:s', $ts) : null,
         ]);
 
         return response()->json(['status' => 'saved']);
