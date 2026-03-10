@@ -853,17 +853,19 @@ function initTimeframeSelector() {
     document.querySelectorAll('#timeframe-selector button').forEach(btn => {
         btn.addEventListener('click', function() {
             const tf = this.dataset.tf;
-            document.querySelectorAll('#timeframe-selector button').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
+            document.querySelectorAll('#timeframe-selector button').forEach(b => {
+                b.classList.remove('active', 'btn-primary');
+            });
+            this.classList.add('btn-primary');
             currentInterval = tf;
             
             // Cleanup GP indicators on timeframe change
             indicatorSeries = {};
             document.querySelectorAll('.indicator-toggle').forEach(cb => cb.checked = false);
             
-            if (sseSource) { try { sseSource.close(); } catch(e){} }
+            if (typeof sseSource !== 'undefined' && sseSource) { try { sseSource.close(); } catch(e){} }
             if (typeof binanceWS !== 'undefined' && binanceWS) { try { binanceWS.close(); } catch(e){} }
-            fetchAndRenderChart(SYMBOL, tf).then(() => { initSSE(); initBinanceWS(); });
+            fetchAndRenderChart(SYMBOL, tf).then(() => { initBinanceWS(); });
         });
     });
 }
