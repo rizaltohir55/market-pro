@@ -160,7 +160,10 @@ def run_prediction_pipeline(symbol_data, forecast_steps=5, model_file=None, mode
         df_forecast.loc[idx, 'roc'] = (pred - df_forecast.loc[idx-5, 'close']) / (df_forecast.loc[idx-5, 'close'] + 1e-9)
         df_forecast.loc[idx, 'volatility'] = df_forecast['close'].iloc[:idx+1].tail(10).std()
         df_forecast.loc[idx, 'atr_ratio'] = df_forecast.loc[idx-1, 'atr_ratio']
-        df_forecast.loc[idx, 'vwap_dist'] = (pred - df_forecast.loc[idx, 'vwap']) / (df_forecast.loc[idx, 'vwap'] + 1e-9) if pd.notnull(df_forecast.loc[idx, 'vwap']) else 0
+        # Forward-fill vwap from the previous row — the pre-allocated template row
+        # has NaN for vwap, which would corrupt vwap_dist and all subsequent scaler.transform() calls.
+        df_forecast.loc[idx, 'vwap'] = df_forecast.loc[idx-1, 'vwap']
+        df_forecast.loc[idx, 'vwap_dist'] = (pred - df_forecast.loc[idx, 'vwap']) / (df_forecast.loc[idx, 'vwap'] + 1e-9)
         df_forecast.loc[idx, 'vol_change_pct'] = 0
 
     r_squared = float(model.score(X_scaled, y)) if not loaded_from_cache else 0.85

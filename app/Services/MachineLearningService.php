@@ -323,8 +323,11 @@ class MachineLearningService
             exec($check . ' 2>&1', $output, $returnVar);
             
             if ($returnVar === 0 && !empty($output)) {
-                $cachedCommand = $cmd;
-                return $cmd;
+                // Windows 'where' can return multiple lines, take the first one.
+                // We MUST return the absolute path for proc_open array syntax to work on Windows.
+                $exactPath = trim($output[0]);
+                $cachedCommand = $exactPath;
+                return $exactPath;
             }
         }
 

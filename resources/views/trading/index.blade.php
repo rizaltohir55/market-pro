@@ -340,6 +340,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // initSSE(); // Deprecated
         initWebSockets();
         initBinanceWS();
+        // Fetch prediction immediately via HTTP — don't wait for WebSocket broadcast
+        fetchPrediction();
     } else {
         // For Stocks/Forex, hide crypto-only elements if they exist
         const badge = document.getElementById('stream-badge');
@@ -599,6 +601,42 @@ function updatePriceDisplay(price) {
 }
 
 // ─── PREDICTION ──────────────────────────────────────────────
+let predictionFetched = false;
+let predictionFetching = false; // Guard against overlapping calls
+
+async function fetchPrediction() {
+    if (predictionFetched || predictionFetching) return;
+    predictionFetching = true;
+
+    const hudConf = document.getElementById('signal-conf-text');
+    if (hudConf) hudConf.textContent = 'LOADING…';
+
+    try {
+        const resp = await fetch(
+            `/api/market/prediction?symbol=${encodeURIComponent(SYMBOL)}&interval=${encodeURIComponent(currentInterval)}`,
+            { signal: AbortSignal.timeout(90000) }
+        );
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (data && data.signal) {
+            predictionFetched = true;
+            renderPrediction(data);
+        } else {
+            if (hudConf) hudConf.textContent = data.error ? data.error.substring(0,18)+'…' : 'NO DATA';
+            // Retry after 15s for empty response
+            setTimeout(() => { predictionFetching = false; fetchPrediction(); }, 15000);
+        }
+    } catch (err) {
+        console.error('[Prediction] HTTP fetch failed:', err.message);
+        if (hudConf) hudConf.textContent = 'RETRYING…';
+        // Retry after 15s on any network/timeout error
+        setTimeout(() => { predictionFetching = false; fetchPrediction(); }, 15000);
+    } finally {
+        // Only clear the lock if we didn't schedule a retry (which will clear it itself)
+        if (predictionFetched) predictionFetching = false;
+    }
+}
+
 function renderPrediction(data) {
     if (!data || !data.categories) {
         const predSignal = document.getElementById('pred-signal');
@@ -782,13 +820,17 @@ function handleBroadcastData(data) {
     
     // 5. Update Prediction
     if (data.trading && data.trading.prediction) {
+        predictionFetched = true;
         renderPrediction(data.trading.prediction);
     } else if (data.predictions) {
         let targetPrediction = data.predictions['15m'];
         if (currentInterval === '1h') targetPrediction = data.predictions['1h'];
         else if (currentInterval === '4h' || currentInterval === '1d') targetPrediction = data.predictions['4h'];
         
-        if (targetPrediction) renderPrediction(targetPrediction);
+        if (targetPrediction) {
+            predictionFetched = true;
+            renderPrediction(targetPrediction);
+        }
     }
 }
 

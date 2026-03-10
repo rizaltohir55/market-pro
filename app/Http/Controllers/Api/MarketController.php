@@ -65,9 +65,13 @@ class MarketController extends Controller
 
     public function prediction(MarketRequest $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
     {
+        set_time_limit(120); // Prevent PHP killing request before XGBoost finishes on cold start
         $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval = $request->get('interval', '15m');
-        $klines   = $market->getKlines($symbol, $interval, 1000);
+        // 500 klines is sufficient for all indicators (EMA-200, ADX, Ichimoku, etc.)
+        // and shares the same cache key as the page-load chart fetch (limit=500),
+        // avoiding a redundant 40-120 s cold Binance API call.
+        $klines   = $market->getKlines($symbol, $interval, 500);
         $signal   = $prediction->getScalpingSignal($klines, $symbol, $interval);
         return response()->json($signal);
     }
