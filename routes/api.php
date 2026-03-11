@@ -44,8 +44,10 @@ Route::prefix('market')->middleware('throttle:market')->group(function () {
     // ─── News & Media ────────────────────────────────────────────────────────
     Route::get('/news',          [MarketController::class, 'news']);
     Route::get('/company-news',  [MarketController::class, 'companyNews']);
-    Route::get('/news/bookmarks', [MarketController::class, 'getBookmarks']);
-    Route::post('/news/bookmarks', [MarketController::class, 'toggleBookmark']);
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/news/bookmarks', [MarketController::class, 'getBookmarks']);
+        Route::post('/news/bookmarks', [MarketController::class, 'toggleBookmark']);
+    });
     Route::get('/economic-calendar', [MarketController::class, 'economicCalendar']);
     
     // ─── Dashboard AJAX Data ──────────────────────────────────────────────

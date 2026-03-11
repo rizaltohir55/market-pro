@@ -26,7 +26,7 @@ class CryptoMarketService extends BaseMarketService
         int    $startTime = 0,
         int    $endTime   = 0
     ): array {
-        $cacheKey = "crypto_hist_{$symbol}_{$interval}_{$limit}_{$startTime}";
+        $cacheKey = "crypto_hist_{$symbol}_{$interval}_{$limit}_{$startTime}_{$endTime}";
         return Cache::remember($cacheKey, 300, function () use ($symbol, $interval, $limit, $startTime, $endTime) {
             try {
                 $params = [
@@ -67,8 +67,9 @@ class CryptoMarketService extends BaseMarketService
         $cacheKey = 'crypto_futures_spot_fallback';
         return Cache::remember($cacheKey, 60, function () {
             try {
-                // FAPI ticker is occasionally blocked or times out on this host. 
-                // Fallback to Spot ticker for prices, which is extremely stable.
+                // FAPI (Futures API) ticker is occasionally blocked or times out on this host. 
+                // We intentionally bypass it and directly use the Spot ticker for prices, 
+                // which is extremely stable.
                 $spotRes = $this->binanceGet('/api/v3/ticker/24hr');
                 
                 if ($spotRes && $spotRes->successful()) {

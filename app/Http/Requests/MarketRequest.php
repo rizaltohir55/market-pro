@@ -19,6 +19,21 @@ class MarketRequest extends FormRequest
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
+    /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'symbol'   => strtoupper($this->input('symbol', 'BTCUSDT')),
+            'interval' => $this->input('interval', '1h'),
+            'horizon'  => $this->input('horizon', 'default'),
+            'limit'    => $this->input('limit', 200),
+            'days'     => $this->input('days', 30),
+            'resolution'=> $this->input('resolution', 'D'),
+        ]);
+    }
+
     public function rules(): array
     {
         return [

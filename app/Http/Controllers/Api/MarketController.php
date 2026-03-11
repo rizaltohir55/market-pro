@@ -62,29 +62,22 @@ class MarketController extends Controller
         $data = $market->getTopPairs(50);
         return response()->json($data);
     }
+    private function getHorizonSettings(string $horizon): array 
+    {
+        return match ($horizon) {
+            '30m' => ['interval' => '30m', 'steps' => 1],
+            '1h'  => ['interval' => '1h',  'steps' => 1],
+            '4h'  => ['interval' => '4h',  'steps' => 1],
+            '24h' => ['interval' => '1d',  'steps' => 1],
+            default => ['interval' => '15m', 'steps' => 5],
+        };
+    }
 
     public function prediction(MarketRequest $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
     {
-        set_time_limit(120); // Prevent PHP killing request before XGBoost finishes on cold start
         $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
-        
         $horizon = $request->get('horizon', 'default');
-        $interval = $request->get('interval', '15m');
-        $steps = 5;
-
-        if ($horizon === '30m') {
-            $interval = '30m';
-            $steps = 1;
-        } elseif ($horizon === '1h') {
-            $interval = '1h';
-            $steps = 1;
-        } elseif ($horizon === '4h') {
-            $interval = '4h';
-            $steps = 1;
-        } elseif ($horizon === '24h') {
-            $interval = '1d';
-            $steps = 1;
-        }
+        ['interval' => $interval, 'steps' => $steps] = $this->getHorizonSettings($horizon);
 
         // 500 klines is sufficient for all indicators
         $klines   = $market->getKlines($symbol, $interval, 500);
@@ -98,25 +91,8 @@ class MarketController extends Controller
     public function batchPredictions(BatchPredictionRequest $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
     {
         $symbols  = $request->get('symbols', []);
-        
         $horizon = $request->get('horizon', 'default');
-        $interval = $request->get('interval', '15m');
-        $steps = 5;
-
-        if ($horizon === '30m') {
-            $interval = '30m';
-            $steps = 1;
-        } elseif ($horizon === '1h') {
-            $interval = '1h';
-            $steps = 1;
-        } elseif ($horizon === '4h') {
-            $interval = '4h';
-            $steps = 1;
-        } elseif ($horizon === '24h') {
-            $interval = '1d';
-            $steps = 1;
-        }
-        
+        ['interval' => $interval, 'steps' => $steps] = $this->getHorizonSettings($horizon);
         if (is_string($symbols)) {
             $symbols = explode(',', $symbols);
         }
@@ -129,6 +105,10 @@ class MarketController extends Controller
             return is_scalar($s) ? trim((string)$s) : '';
         }, $symbols)), 0, 50);
         
+        // Batch pulling klines for multiple symbols requires a lot of memory before
+        // the python process picks it up. Temporarily bump limit to 512M if needed.
+        ini_set('memory_limit', '512M');
+
         $batchKlines = [];
         foreach ($symbols as $symbol) {
             $batchKlines[strtoupper($symbol)] = [
@@ -360,48 +340,7 @@ class MarketController extends Controller
                 case 'crpr':
                     // Quantitative Fundamental Rating based on Real-time Ratios
                     if (!$query) return response()->json(['error' => 'Symbol required'], 400);
-                    $val = $stockMarket->getEquityValuation($query);
-                    
-                    $score = 'BB';
-                    $outlook = 'Stable';
-                    if (!empty($val['ratios'])) {
-                        $ro = $val['ratios'] ?? [];
-                        $pts = 0;
-                        
-                        // Gross Margin Check
-                        $gm = (float) ($ro['gross_margin'] ?? data_get($val, 'valuation.gross_margin', 0));
-                        if ($gm > 30) $pts++;
-                        
-                        // Net Margin Check
-                        $nm = (float) ($ro['net_margin'] ?? data_get($val, 'valuation.net_margin', 0));
-                        if ($nm > 10) $pts++;
-                        
-                        // Current Ratio Check
-                        $cr = (float) ($ro['current_ratio'] ?? data_get($val, 'valuation.current_ratio', 0));
-                        if ($cr > 1.5) $pts++;
-                        
-                        // Debt to Equity Check
-                        $de = (float) ($ro['debt_equity'] ?? data_get($val, 'valuation.debt_equity', 100));
-                        if ($de < 50) $pts++;
-                        
-                        // ROE Check
-                        $roe = (float) ($ro['roe'] ?? data_get($val, 'valuation.roe', 0));
-                        if ($roe > 15) $pts++;
-                        
-                        $map = [0 => 'C', 1 => 'B', 2 => 'BB', 3 => 'BBB', 4 => 'A', 5 => 'AA'];
-                        $score = $map[$pts] ?? 'BB';
-                        $outlook = $pts > 3 ? 'Positive' : ($pts < 2 ? 'Negative' : 'Stable');
-                    }
-
-                    return response()->json([
-                        'type' => 'crpr', 
-                        'data' => [
-                            'valuation' => $val, 
-                            'fundamental_score' => $score, 
-                            'outlook' => $outlook,
-                            'methodology' => 'Quantitative Ratio Analysis'
-                        ]
-                    ]);
+                    return response()->json($stockMarket->calculateFundamentalScore($query));
 
                 default:
                     return response()->json(['error' => 'Unknown command'], 400);
@@ -458,10 +397,6 @@ class MarketController extends Controller
 
     public function getBookmarks(Request $request): JsonResponse
     {
-        // For guests, return empty array instead of 401 to avoid console errors
-        if (! $request->user()) {
-            return response()->json([]);
-        }
 
         $bookmarks = \App\Models\SavedArticle::where('user_id', $request->user()->id)
             ->orderBy('created_at', 'desc')
@@ -472,10 +407,6 @@ class MarketController extends Controller
 
     public function toggleBookmark(Request $request): JsonResponse
     {
-        // Auth guard: bookmarks require an authenticated user
-        if (! $request->user()) {
-            return response()->json(['error' => 'Unauthenticated'], 401);
-        }
 
         $request->validate([
             'url' => ['required', 'url', 'regex:/^https?:\/\//i']

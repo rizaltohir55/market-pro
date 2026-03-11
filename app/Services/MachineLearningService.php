@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use Symfony\Component\Process\Process;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+
 class MachineLearningService
 {
     /**
@@ -42,54 +45,34 @@ class MachineLearningService
         // 2. Fallback to Local proc_open
         $scriptPath = base_path('app/ML/xgboost_engine.py');
         
-        // Using proc_open for safer execution and reading stdout/stderr
-        $descriptorspec = [
-            0 => ["pipe", "r"], // stdin
-            1 => ["pipe", "w"], // stdout
-            2 => ["pipe", "w"]  // stderr
-        ];
-
-        // Ensure we use the correct python command (python or python3)
-        // Hardened: using array-based command to prevent injection
+        // Using Symfony Process for safer execution, timeouts, and reading stdout
         $python = $this->getPythonCommand();
-        $process = proc_open([$python, $scriptPath], $descriptorspec, $pipes);
+        $process = new Process([$python, $scriptPath]);
+        $process->setInput($jsonInput);
+        $process->setTimeout(60);
 
-        if (is_resource($process)) {
-            fwrite($pipes[0], $jsonInput);
-            fclose($pipes[0]);
-
-            $stdout = stream_get_contents($pipes[1]);
-            fclose($pipes[1]);
-
-            $stderr = stream_get_contents($pipes[2]);
-            fclose($pipes[2]);
-
-            $returnValue = proc_close($process);
-
-            if ($returnValue === 0) {
-                $output = $this->extractJson($stdout);
-                if (!$output) {
-                    return [
-                        'error' => "Failed to parse JSON from Python output. Raw: " . substr($stdout, 0, 500),
-                        'forecast' => [],
-                        'r_squared' => 0
-                    ];
-                }
-                
-                if (isset($output['error'])) {
-                    return ['error' => $output['error'], 'forecast' => [], 'r_squared' => 0];
-                }
-                return $output;
-            } else {
+        try {
+            $process->mustRun();
+            $output = $this->extractJson($process->getOutput());
+            if (!$output) {
                 return [
-                    'error' => "Process exited with code {$returnValue}. Stderr: {$stderr}",
+                    'error' => "Failed to parse JSON from Python output. Raw: " . substr($process->getOutput(), 0, 500),
                     'forecast' => [],
                     'r_squared' => 0
                 ];
             }
+            if (isset($output['error'])) {
+                return ['error' => $output['error'], 'forecast' => [], 'r_squared' => 0];
+            }
+            return $output;
+        } catch (ProcessFailedException $e) {
+            $msg = app()->environment('production') ? 'Prediction engine failed' : $e->getMessage();
+            return [
+                'error' => 'Process failed or timed out: ' . $msg,
+                'forecast' => [],
+                'r_squared' => 0
+            ];
         }
-
-        return ['error' => 'Failed to open process', 'forecast' => [], 'r_squared' => 0];
     }
 
     /**
@@ -128,37 +111,18 @@ class MachineLearningService
         $jsonInput = json_encode($inputData);
         $scriptPath = base_path('app/ML/xgboost_engine.py');
         
-        $descriptorspec = [
-            0 => ["pipe", "r"],
-            1 => ["pipe", "w"],
-            2 => ["pipe", "w"]
-        ];
-
-        // Hardened: using array-based command to prevent injection
-        // Hardened: using array-based command to prevent injection
         $python = $this->getPythonCommand();
-        $process = proc_open([$python, $scriptPath], $descriptorspec, $pipes);
+        $process = new Process([$python, $scriptPath]);
+        $process->setInput($jsonInput);
+        $process->setTimeout(120); // Batch process might take longer
 
-        if (is_resource($process)) {
-            fwrite($pipes[0], $jsonInput);
-            fclose($pipes[0]);
-
-            $stdout = stream_get_contents($pipes[1]);
-            fclose($pipes[1]);
-
-            $stderr = stream_get_contents($pipes[2]);
-            fclose($pipes[2]);
-
-            $returnValue = proc_close($process);
-
-            if ($returnValue === 0) {
-                return $this->extractJson($stdout) ?? ['error' => 'Invalid JSON output from Python. Raw: ' . substr($stdout, 0, 200)];
-            } else {
-                return ['error' => "Batch process failed. Stderr: {$stderr}"];
-            }
+        try {
+            $process->mustRun();
+            return $this->extractJson($process->getOutput()) ?? ['error' => 'Invalid JSON output from Python. Raw: ' . substr($process->getOutput(), 0, 200)];
+        } catch (ProcessFailedException $e) {
+            $msg = app()->environment('production') ? 'Batch prediction engine failed' : $e->getMessage();
+            return ['error' => 'Batch process failed or timed out: ' . $msg];
         }
-
-        return ['error' => 'Failed to open batch process'];
     }
 
     /**

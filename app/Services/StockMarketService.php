@@ -551,6 +551,56 @@ class StockMarketService extends BaseMarketService
         }) ?? [];
     }
 
+    /**
+     * Calculates a fundamental quantitative score (CRPR) based on real-time ratios.
+     */
+    public function calculateFundamentalScore(string $symbol): array
+    {
+        $val = $this->getEquityValuation($symbol);
+        
+        $score = 'BB';
+        $outlook = 'Stable';
+        
+        if (!empty($val['ratios'])) {
+            $ro = $val['ratios'] ?? [];
+            $pts = 0;
+            
+            // Gross Margin Check
+            $gm = (float) ($ro['gross_margin'] ?? data_get($val, 'valuation.gross_margin', 0));
+            if ($gm > 30) $pts++;
+            
+            // Net Margin Check
+            $nm = (float) ($ro['net_margin'] ?? data_get($val, 'valuation.net_margin', 0));
+            if ($nm > 10) $pts++;
+            
+            // Current Ratio Check
+            $cr = (float) ($ro['current_ratio'] ?? data_get($val, 'valuation.current_ratio', 0));
+            if ($cr > 1.5) $pts++;
+            
+            // Debt to Equity Check
+            $de = (float) ($ro['debt_equity'] ?? data_get($val, 'valuation.debt_equity', 100));
+            if ($de < 50) $pts++;
+            
+            // ROE Check
+            $roe = (float) ($ro['roe'] ?? data_get($val, 'valuation.roe', 0));
+            if ($roe > 15) $pts++;
+            
+            $map = [0 => 'C', 1 => 'B', 2 => 'BB', 3 => 'BBB', 4 => 'A', 5 => 'AA'];
+            $score = $map[$pts] ?? 'BB';
+            $outlook = $pts > 3 ? 'Positive' : ($pts < 2 ? 'Negative' : 'Stable');
+        }
+
+        return [
+            'type' => 'crpr', 
+            'data' => [
+                'valuation' => $val, 
+                'fundamental_score' => $score, 
+                'outlook' => $outlook,
+                'methodology' => 'Quantitative Ratio Analysis'
+            ]
+        ];
+    }
+
     public function getAnalystEstimates(string $symbol): array
     {
         $symbol   = strtoupper($symbol);
