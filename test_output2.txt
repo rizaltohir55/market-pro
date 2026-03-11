@@ -1,0 +1,79 @@
+
+   PASS  Tests\Unit\EconomicCalendarTest
+  ✓ get economic calendar returns form… 0.43s  
+
+   PASS  Tests\Unit\ExampleTest
+  ✓ that true is true                   0.03s  
+
+   PASS  Tests\Unit\MachineLearningTest
+  ✓ linear regression prediction        0.04s  
+  ✓ xgboost prediction                  6.47s  
+  ✓ monte carlo simulation              0.04s  
+
+   WARN  Tests\Unit\PredictionServiceTest
+  ! get scalping signal runs without u… 0.10s  
+
+   PASS  Tests\Unit\TechnicalAnalysisTest
+  ✓ calculate ema
+  ✓ calculate rsi
+  ✓ calculate macd
+  ✓ calculate bollinger bands
+  ✓ find support resistance
+  ✓ calculate atr
+  ✓ calculate stochastic
+  ✓ calculate adx
+  ✓ calculate pivot points
+  ✓ detect volume spike
+  ✓ detect candlestick patterns
+  ✓ calculate hurst exponent
+  ✓ calculate fractal dimension
+  ✓ apply zscore
+  ✓ calculate chandelier exit
+
+   PASS  Tests\Feature\ExampleTest
+  ✓ the application returns a successf… 0.13s  
+
+   PASS  Tests\Feature\MarketIntegration\BinanceApiTest
+  ✓ binance ping endpoint is reachable  0.51s  
+  ✓ binance klines returns expected oh… 0.43s  
+  ✓ binance ticker 24hr returns expect… 0.44s  
+  ✓ binance bulk ticker returns array…  1.06s  
+
+   WARN  Tests\Feature\MarketIntegration\FinnhubApiTest
+  ✓ finnhub market news endpoint retur… 1.24s  
+  ✓ finnhub company news endpoint retu… 6.23s  
+  - finnhub stock search returns resu… 10.06s  
+  - finnhub stock metric returns valu… 10.07s  
+  ✓ finnhub recommendation returns ana… 2.82s  
+
+   PASS  Tests\Feature\MarketIntegration\ForexApiTest
+  ✓ exchange rate api ping is reachabl… 0.46s  
+  ✓ exchange rate api returns usd conv… 0.44s  
+  ✓ forex market service get forex rat… 0.46s  
+  ✓ forex history returns time series…  0.40s  
+
+   PASS  Tests\Feature\MarketIntegration\YahooFinanceApiTest
+  ✓ yahoo v8 chart returns valid stock… 0.20s  
+  ✓ yahoo v7 bulk quote returns multip… 1.00s  
+  ✓ yahoo crumb cookie authentication…  0.53s  
+  ✓ yahoo stock candle data returns oh… 0.17s  
+  ✓ yahoo major indices return valid d… 0.99s  
+
+   PASS  Tests\Feature\Security\InputValidationTest
+  ✓ symbol array input returns 422      0.10s  
+  ✓ valid symbol input works            4.15s  
+  ✓ invalid interval input returns 422  0.05s  
+  ✓ invalid limit input returns 422     0.04s  
+  ✓ batch predictions malformed symbol… 5.48s  
+
+   PASS  Tests\Feature\Security\RateLimitTest
+  ✓ api rate limiting is active         0.23s  
+
+   PASS  Tests\Feature\Security\RobustnessTest
+  ✓ ml handles large dataset           11.21s  
+  ✓ coingecko specific id fallback      0.05s  
+  ✓ terminal crpr handles missing data  0.04s  
+
+  Tests:    1 risky, 2 skipped, 46 passed (283 assertions)
+  Duration: 66.60s
+

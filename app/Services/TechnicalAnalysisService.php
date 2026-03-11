@@ -560,7 +560,10 @@ class TechnicalAnalysisService
     {
         if (count($klines) < 2) return [];
 
-        $historical = array_slice($klines, 0, -1);
+        // LIMIT LOOKBACK: Use only the last 100 bars for structural pivots to ensure local relevance
+        $lookback = min(count($klines) - 1, 100);
+        $historical = array_slice($klines, -$lookback - 1, $lookback);
+        
         $high = max(array_column($historical, 'high'));
         $low = min(array_column($historical, 'low'));
         $close = end($historical)['close'];
@@ -902,10 +905,58 @@ class TechnicalAnalysisService
     }
 
     /**
+     * Generate step-specific TP/SL levels for a forecast path.
+     * Uses sqrt(time) scaling for volatility expansion.
+     */
+    public function calculateForecastCorridor(float $currentPrice, array $forecast, float $atr, string $side = 'BUY'): array
+    {
+        $path = [];
+        $isBuy = strtoupper($side) === 'BUY';
+        
+        foreach ($forecast as $i => $predPrice) {
+            $step = $i + 1;
+            // Volatility expands with square root of time
+            $volScale = sqrt($step);
+            
+            // Base TP/SL around the predicted price for that specific step
+            // This creates a "Safe Zone" corridor
+            $tpDistance = $atr * 1.5 * $volScale;
+            $slDistance = $atr * 1.0 * $volScale;
+            
+            if ($isBuy) {
+                $tp = $predPrice + ($tpDistance * 0.5); // More aggressive TP
+                $sl = $predPrice - $slDistance;
+            } else {
+                $tp = $predPrice - ($tpDistance * 0.5);
+                $sl = $predPrice + $slDistance;
+            }
+            
+            // Determine micro-decision for this segment
+            $prevPrice = ($i === 0) ? $currentPrice : $forecast[$i-1];
+            $delta = (($predPrice - $prevPrice) / $prevPrice) * 100;
+            
+            $decision = 'NEUTRAL';
+            if ($delta > 0.05) $decision = 'BULLISH';
+            elseif ($delta < -0.05) $decision = 'BEARISH';
+
+            $path[] = [
+                'step' => $step,
+                'price' => round($predPrice, 6),
+                'tp' => round($tp, 6),
+                'sl' => round($sl, 6),
+                'decision' => $decision,
+                'change_pct' => round($delta, 3)
+            ];
+        }
+        
+        return $path;
+    }
+
+    /**
      * Calculate Dynamic High-Accuracy Take Profit and Stop Loss levels.
      * Uses ATR for volatility and Fibonacci Pivots for structural alignment.
      */
-    public function calculateDynamicTPBL(array $klines, string $side = 'BUY'): array
+    public function calculateDynamicTPBL(array $klines, string $side = 'BUY', float $tpMult = 1.5, float $slMult = 1.0): array
     {
         $lastClose = end($klines)['close'];
         $atrHist = $this->calculateATR($klines, 14);
@@ -914,27 +965,41 @@ class TechnicalAnalysisService
 
         if (empty($pivots)) {
             // Fallback to basic ATR multipliers if pivots fail
-            $tp = $lastClose + ($side === 'BUY' ? 2 * $atr : -2 * $atr);
-            $sl = $lastClose + ($side === 'BUY' ? -1.5 * $atr : 1.5 * $atr);
+            $tp = $lastClose + ($side === 'BUY' ? $tpMult * $atr : -$tpMult * $atr);
+            $sl = $lastClose + ($side === 'BUY' ? -$slMult * $atr : $slMult * $atr);
             return ['tp' => $tp, 'sl' => $sl, 'method' => 'ATR_ONLY'];
         }
 
         if (strtoupper($side) === 'BUY') {
-            // SL: Ideally just below S1, or 1.5*ATR if price is far from S1
-            $sl = min($lastClose - (1.2 * $atr), $pivots['s1'] * 0.998);
-            // TP: Ideally at R1 or R2
-            $tp = max($lastClose + (2.0 * $atr), $pivots['r1']);
-            // If R1 is too close (RR < 1), target R2
-            if (($tp - $lastClose) < ($lastClose - $sl)) {
-                $tp = $pivots['r2'];
+            // SL: Tighter of (ATR-based SL) or (just below S1)
+            $atrSl = $lastClose - ($slMult * $atr);
+            $structSl = $pivots['s1'] * 0.999;
+            $sl = max($atrSl, $structSl); // Pick the level closer to price for realistic risk
+
+            // TP: Tighter of (ATR-based TP) or (R1 target)
+            $atrTp = $lastClose + ($tpMult * $atr);
+            $structTp = $pivots['r1'];
+            $tp = min($atrTp, $structTp); 
+
+            // Ensure Minimum RR of 1.2
+            if (($tp - $lastClose) < (($lastClose - $sl) * 1.2)) {
+                // If structural R1 is too close, push to ATR target or R2 if needed
+                $tp = max($atrTp, $pivots['r1']);
             }
         } else {
-            // SL: Ideally just above R1
-            $sl = max($lastClose + (1.2 * $atr), $pivots['r1'] * 1.002);
-            // TP: Ideally at S1 or S2
-            $tp = min($lastClose - (2.0 * $atr), $pivots['s1']);
-            if (($lastClose - $tp) < ($sl - $lastClose)) {
-                $tp = $pivots['s2'];
+            // SL: Tighter of (ATR-based SL) or (just above R1)
+            $atrSl = $lastClose + ($slMult * $atr);
+            $structSl = $pivots['r1'] * 1.001;
+            $sl = min($atrSl, $structSl);
+
+            // TP: Tighter of (ATR-based TP) or (S1 target)
+            $atrTp = $lastClose - ($tpMult * $atr);
+            $structTp = $pivots['s1'];
+            $tp = max($atrTp, $structTp);
+
+            // Ensure Minimum RR of 1.2
+            if (($lastClose - $tp) < (($sl - $lastClose) * 1.2)) {
+                $tp = min($atrTp, $pivots['s1']);
             }
         }
 
@@ -943,7 +1008,7 @@ class TechnicalAnalysisService
             'sl' => round($sl, 6),
             'pivots' => $pivots,
             'atr' => round($atr, 6),
-            'method' => 'DYNAMIC_STRUCTURAL'
+            'method' => 'DYNAMIC_STRUCTURAL_OPTIMIZED'
         ];
     }
 }

@@ -15,22 +15,22 @@ class PredictionService
         $this->ml = $ml;
     }
 
-    public function getScalpingSignal(array $klines, string $symbol = 'UNKNOWN', string $interval = '15m', array $htfKlines = [], int $fearGreed = 50, float $lsRatio = 1.0, bool $isTrending = false): array
+    public function getScalpingSignal(array $klines, string $symbol = 'UNKNOWN', string $interval = '15m', array $htfKlines = [], int $fearGreed = 50, float $lsRatio = 1.0, bool $isTrending = false, int $forecastSteps = 5): array
     {
         $symbol = strtoupper($symbol);
         // Include macro context in cache key to ensure predictions are context-aware
-        $contextHash = md5($interval . '_' . $fearGreed . '_' . round($lsRatio, 2) . ($isTrending ? 'T' : 'R'));
+        $contextHash = md5($interval . '_' . $fearGreed . '_' . round($lsRatio, 2) . ($isTrending ? 'T' : 'R') . '_' . $forecastSteps);
         $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
         
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending) {
-            return $this->calculateSignal($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending);
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending, $forecastSteps) {
+            return $this->calculateSignal($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending, null, $forecastSteps);
         });
     }
 
     /**
      * Get batch scalping signals with optimized ML execution.
      */
-    public function getBatchSignals(array $symbolData, string $interval = '15m'): array
+    public function getBatchSignals(array $symbolData, string $interval = '15m', int $forecastSteps = 5): array
     {
         $batchResults = [];
         $mlBatchInput = [];
@@ -39,7 +39,7 @@ class PredictionService
         foreach ($symbolData as $symbol => $data) {
             $symbol = strtoupper($symbol);
             // Since batch signals often use default macro values (50, 1.0, false), we use a stable hash
-            $contextHash = md5($interval . '_50_1.0_R');
+            $contextHash = md5($interval . '_50_1.0_R_' . $forecastSteps);
             $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
             
             $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
@@ -61,16 +61,16 @@ class PredictionService
         }
 
         // 2. Perform Batch ML prediction (The bottleneck)
-        $mlResults = $this->ml->predictBatchXGBoost($mlBatchInput, 5);
+        $mlResults = $this->ml->predictBatchXGBoost($mlBatchInput, $forecastSteps);
 
         // 3. Finalize each signal with TA confluence
         foreach ($mlBatchInput as $symbol => $klines) {
             $htfKlines = $symbolData[$symbol]['htfKlines'] ?? [];
             $mlResult = $mlResults[$symbol] ?? ['error' => 'ML result missing'];
             
-            $signal = $this->calculateSignal($klines, $symbol, $interval, $htfKlines, 50, 1.0, false, $mlResult);
+            $signal = $this->calculateSignal($klines, $symbol, $interval, $htfKlines, 50, 1.0, false, $mlResult, $forecastSteps);
             
-            $contextHash = md5($interval . '_50_1.0_R');
+            $contextHash = md5($interval . '_50_1.0_R_' . $forecastSteps);
             $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
             \Illuminate\Support\Facades\Cache::put($cacheKey, $signal, 300);
             $batchResults[$symbol] = $signal;
@@ -79,7 +79,7 @@ class PredictionService
         return $batchResults;
     }
 
-    private function calculateSignal(array $klines, string $symbol, string $interval, array $htfKlines, int $fearGreed, float $lsRatio, bool $isTrending, ?array $precomputedML = null): array
+    private function calculateSignal(array $klines, string $symbol, string $interval, array $htfKlines, int $fearGreed, float $lsRatio, bool $isTrending, ?array $precomputedML = null, int $forecastSteps = 5): array
     {
         $defaultResponse = [
             'signal' => 'NEUTRAL',
@@ -376,7 +376,7 @@ class PredictionService
         $indicatorsList[] = ['name' => 'Kalman Denoise', 'value' => 'Smooth', 'signal' => $kalmanSig];
 
         // XGBoost Forecast (Real ML)
-        $mlResult = $precomputedML ?? $this->ml->predictXGBoost($klines, 5);
+        $mlResult = $precomputedML ?? $this->ml->predictXGBoost($klines, $forecastSteps);
         $mlSig = 'NEUTRAL';
         $lr = ['slope' => 0, 'intercept' => 0, 'r_squared' => 0]; 
         
@@ -387,9 +387,9 @@ class PredictionService
             if ($lastPred > $currentPrice && $r2 > 0.5) { $categories['Advanced']['buy'] += 15; $mlSig = 'BULLISH (XGB)'; }
             elseif ($lastPred < $currentPrice && $r2 > 0.5) { $categories['Advanced']['sell'] += 15; $mlSig = 'BEARISH (XGB)'; }
             $indicatorsList[] = ['name' => 'XGBoost ML', 'value' => 'R2:'.round($r2, 2), 'signal' => $mlSig];
-            $lr = $this->ml->predictLinearRegression($closes, 5);
+            $lr = $this->ml->predictLinearRegression($closes, $forecastSteps);
         } else {
-            $lr = $this->ml->predictLinearRegression($closes, 5);
+            $lr = $this->ml->predictLinearRegression($closes, $forecastSteps);
             if ($lr['slope'] > 0 && $lr['r_squared'] > 0.7) { $categories['Advanced']['buy'] += 10; $mlSig = 'BULLISH (LR)'; }
             elseif ($lr['slope'] < 0 && $lr['r_squared'] > 0.7) { $categories['Advanced']['sell'] += 10; $mlSig = 'BEARISH (LR)'; }
             $indicatorsList[] = ['name' => 'Legacy ML', 'value' => 'Fallback', 'signal' => $mlSig];
@@ -547,7 +547,15 @@ class PredictionService
         }
         // --- 13. DYNAMIC ACCURACY TP/SL ---
         $isBuy = str_contains($overallSignal, 'BUY');
-        $levels = $this->ta->calculateDynamicTPBL($klines, $isBuy ? 'BUY' : 'SELL');
+
+        // NEW: Dynamic Multipliers based on Forecast Horizon
+        // If forecastSteps is 5, we use 1.0x ATR for SL and 1.5x for TP.
+        // If forecastSteps is 20, we scale up slightly.
+        $k_scaling = max(1.0, $forecastSteps / 5);
+        $tpMult = 1.5 * $k_scaling;
+        $slMult = 1.0 * $k_scaling;
+
+        $levels = $this->ta->calculateDynamicTPBL($klines, $isBuy ? 'BUY' : 'SELL', $tpMult, $slMult);
         
         $trailingStop = $this->ta->calculateTrailingStopATR($klines, $isBuy ? 'BUY' : 'SELL', 2.0);
         
@@ -588,7 +596,13 @@ class PredictionService
                 'monte_carlo' => $mc
             ],
             'hurst' => $hurst,
-            'summary' => "Engine V4.1 (High Accuracy): {$overallSignal}. RR: " . round($riskReward, 2) . ". Consistency: {$persistence} bars. Market is {$marketRegime}. R2: " . round($mlResult['r_squared'] ?? 0, 2) . "."
+            'forecast_path' => $this->ta->calculateForecastCorridor(
+                $currentPrice, 
+                $mlResult['forecast'] ?? ($lr['slope'] != 0 ? array_map(fn($i) => $currentPrice + ($lr['slope'] * $i), range(1, $forecastSteps)) : []),
+                $levels['atr'] ?? ($currentPrice * 0.01),
+                $isBuy ? 'BUY' : 'SELL'
+            ),
+            'summary' => "Engine V4.2 (Multi-Step): {$overallSignal}. RR: " . round($riskReward, 2) . ". Consistency: {$persistence} bars. Market is {$marketRegime}. R2: " . round($mlResult['r_squared'] ?? 0, 2) . "."
          ];
      }
  }

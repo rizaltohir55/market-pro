@@ -147,11 +147,20 @@
                 <!-- ... existing prediction HUD ... -->
             <div style="background: var(--bg-surface); backdrop-filter: blur(20px); border-radius: calc(var(--radius-xl) - 1px); padding: var(--space-4); height: 100%;">
                 <div class="panel-header" style="justify-content:space-between; border-bottom:none; padding-bottom:0; padding-left:0; padding-right:0">
-                    <span class="panel-title" style="text-shadow: 0 0 10px rgba(59, 130, 246, 0.4)">
+                    <span class="panel-title" style="text-shadow: 0 0 10px rgba(59, 130, 246, 0.4); display:flex; align-items:center; gap:8px;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                        AI Signal HUD
+                        AI Signal
                     </span>
-                    <span id="market-regime-badge" class="badge badge-neutral text-small" style="display:none; transform: translateZ(10px)">RANGING</span>
+                    <div style="display:flex; align-items:center; gap: 6px;">
+                        <div class="horizon-selector" style="display:flex; background:rgba(0,0,0,0.3); border-radius:12px; padding:2px; border:1px solid rgba(255,255,255,0.05);">
+                            <button class="btn btn-ghost btn-sm horizon-btn active" data-horizon="default" style="padding:2px 6px; font-size:0.65rem; border-radius:10px; height:auto; line-height:1; background:var(--accent); color:#fff;">Auto</button>
+                            <button class="btn btn-ghost btn-sm horizon-btn" data-horizon="30m" style="padding:2px 6px; font-size:0.65rem; border-radius:10px; height:auto; line-height:1;">30m</button>
+                            <button class="btn btn-ghost btn-sm horizon-btn" data-horizon="1h" style="padding:2px 6px; font-size:0.65rem; border-radius:10px; height:auto; line-height:1;">1H</button>
+                            <button class="btn btn-ghost btn-sm horizon-btn" data-horizon="4h" style="padding:2px 6px; font-size:0.65rem; border-radius:10px; height:auto; line-height:1;">4H</button>
+                            <button class="btn btn-ghost btn-sm horizon-btn" data-horizon="24h" style="padding:2px 6px; font-size:0.65rem; border-radius:10px; height:auto; line-height:1;">24H</button>
+                        </div>
+                        <span id="market-regime-badge" class="badge badge-neutral text-small" style="display:none; transform: translateZ(10px)">RANGING</span>
+                    </div>
                 </div>
                 <div class="panel-body" style="padding: var(--space-4) 0 0 0;">
                     <div class="prediction-panel" id="prediction-panel">
@@ -356,7 +365,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // News is global
     fetchNews();
     
+    
     initTimeframeSelector();
+    initHorizonSelector();
     
     // Bind tool logic ONCE
     initChartTools();
@@ -603,6 +614,50 @@ function updatePriceDisplay(price) {
 // ─── PREDICTION ──────────────────────────────────────────────
 let predictionFetched = false;
 let predictionFetching = false; // Guard against overlapping calls
+let currentHorizon = 'default';
+
+function initHorizonSelector() {
+    document.querySelectorAll('.horizon-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.horizon-btn').forEach(b => {
+                b.classList.remove('active', 'btn-primary');
+                b.style.background = 'transparent';
+                b.style.color = 'inherit';
+            });
+            this.classList.add('active', 'btn-primary');
+            this.style.background = 'var(--accent)';
+            this.style.color = '#fff';
+            currentHorizon = this.dataset.horizon;
+            
+            // Re-fetch prediction with new horizon
+            predictionFetched = false;
+            fetchPrediction();
+            
+            // Synchronize the Chart Timeframe to match the ML Horizon baseline
+            let newChartInterval = currentInterval; 
+            if (currentHorizon === '30m') newChartInterval = '30m';
+            if (currentHorizon === '1h') newChartInterval = '1h';
+            if (currentHorizon === '4h') newChartInterval = '4h';
+            if (currentHorizon === '24h') newChartInterval = '1d';
+            
+            if (currentInterval !== newChartInterval) {
+                currentInterval = newChartInterval;
+                // Update timeframe selector UI to match
+                document.querySelectorAll('#timeframe-selector button').forEach(b => {
+                    b.classList.remove('active', 'btn-primary');
+                    if (b.dataset.tf === currentInterval) b.classList.add('btn-primary');
+                });
+                
+                // Cleanup GP indicators and reload chart
+                indicatorSeries = {};
+                document.querySelectorAll('.indicator-toggle').forEach(cb => cb.checked = false);
+                if (typeof sseSource !== 'undefined' && sseSource) { try { sseSource.close(); } catch(e){} }
+                if (typeof binanceWS !== 'undefined' && binanceWS) { try { binanceWS.close(); } catch(e){} }
+                fetchAndRenderChart(SYMBOL, currentInterval).then(() => { initBinanceWS(); });
+            }
+        });
+    });
+}
 
 async function fetchPrediction() {
     if (predictionFetched || predictionFetching) return;
@@ -613,7 +668,7 @@ async function fetchPrediction() {
 
     try {
         const resp = await fetch(
-            `/api/market/prediction?symbol=${encodeURIComponent(SYMBOL)}&interval=${encodeURIComponent(currentInterval)}`,
+            `/api/market/prediction?symbol=${encodeURIComponent(SYMBOL)}&interval=${encodeURIComponent(currentInterval)}&horizon=${encodeURIComponent(currentHorizon)}`,
             { signal: AbortSignal.timeout(90000) }
         );
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -820,16 +875,20 @@ function handleBroadcastData(data) {
     
     // 5. Update Prediction
     if (data.trading && data.trading.prediction) {
-        predictionFetched = true;
-        renderPrediction(data.trading.prediction);
+        if (currentHorizon === 'default' || currentHorizon === data.trading.prediction.horizon) {
+            predictionFetched = true;
+            renderPrediction(data.trading.prediction);
+        }
     } else if (data.predictions) {
         let targetPrediction = data.predictions['15m'];
         if (currentInterval === '1h') targetPrediction = data.predictions['1h'];
         else if (currentInterval === '4h' || currentInterval === '1d') targetPrediction = data.predictions['4h'];
         
         if (targetPrediction) {
-            predictionFetched = true;
-            renderPrediction(targetPrediction);
+            if (currentHorizon === 'default' || currentHorizon === targetPrediction.horizon) {
+                predictionFetched = true;
+                renderPrediction(targetPrediction);
+            }
         }
     }
 }
@@ -862,6 +921,21 @@ function initTimeframeSelector() {
             // Cleanup GP indicators on timeframe change
             indicatorSeries = {};
             document.querySelectorAll('.indicator-toggle').forEach(cb => cb.checked = false);
+            
+            // Reset Horizon Selector to Auto so it adapts to the new chart timeframe
+            document.querySelectorAll('.horizon-btn').forEach(b => {
+                b.classList.remove('active', 'btn-primary');
+                b.style.background = 'transparent';
+                b.style.color = 'inherit';
+                if (b.dataset.horizon === 'default') {
+                    b.classList.add('active', 'btn-primary');
+                    b.style.background = 'var(--accent)';
+                    b.style.color = '#fff';
+                }
+            });
+            currentHorizon = 'default';
+            predictionFetched = false;
+            fetchPrediction();
             
             if (typeof sseSource !== 'undefined' && sseSource) { try { sseSource.close(); } catch(e){} }
             if (typeof binanceWS !== 'undefined' && binanceWS) { try { binanceWS.close(); } catch(e){} }

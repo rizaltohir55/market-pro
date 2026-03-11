@@ -87,6 +87,17 @@
                 <input type="text" id="scanner-filter" placeholder="Filter pairs..." spellcheck="false" autocomplete="off">
             </div>
 
+            <div class="scanner-select-field" style="margin-right: 8px;">
+                <select id="scanner-horizon">
+                    <option value="default">Horizon: Auto</option>
+                    <option value="30m">Horizon: 30m</option>
+                    <option value="1h">Horizon: 1H</option>
+                    <option value="4h">Horizon: 4H</option>
+                    <option value="24h">Horizon: 24H</option>
+                </select>
+                <svg class="select-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+
             <div class="scanner-select-field">
                 <select id="scanner-sort">
                     <option value="volume_desc">Sort: Volume ↓</option>
@@ -485,6 +496,14 @@ document.addEventListener('DOMContentLoaded', function() {
         renderScannerTable(); // Re-render with new sort
     });
 
+    document.getElementById('scanner-horizon')?.addEventListener('change', function() {
+        // Clear all existing signals in the table so user knows it is loading
+        document.querySelectorAll('.scanner-signal').forEach(td => {
+            td.innerHTML = '<span class="badge badge-neutral signal-loading" style="display:inline-block;width:70px;height:18px;margin:0;border:none"></span>';
+        });
+        loadSignalsForTopPairs(); // Fetch new batch predictions for new horizon
+    });
+
     document.getElementById('scanner-filter')?.addEventListener('input', function() {
         renderScannerTable();
     });
@@ -750,14 +769,18 @@ function loadSignalsForTopPairs() {
 
     const fetchBatch = (symbols) => {
         if (!symbols.length) return;
-        fetch(`{{ url('/api/market/batch-predictions') }}?symbols=${symbols.join(',')}&interval=15m`)
+        
+        const horizon = document.getElementById('scanner-horizon')?.value || 'default';
+        
+        fetch(`{{ url('/api/market/batch-predictions') }}?symbols=${symbols.join(',')}&interval=15m&horizon=${horizon}`)
             .then(r => r.json())
             .then(results => {
                 Object.entries(results).forEach(([symbol, data]) => {
                     const row = document.querySelector(`tr[data-symbol="${symbol}"] .scanner-signal`);
                     if (row) {
-                        const cls = data.signal.includes('BUY') ? 'badge-buy' : data.signal.includes('SELL') ? 'badge-sell' : 'badge-neutral';
-                        row.innerHTML = `<span class="badge ${cls}">${data.signal} ${data.confidence}%</span>`;
+                        const cls = data.signal.includes('BUY') || data.signal.includes('BULLISH') ? 'badge-buy' : data.signal.includes('SELL') || data.signal.includes('BEARISH') ? 'badge-sell' : 'badge-neutral';
+                        const hzStr = data.horizon && data.horizon !== 'default' ? ` <span style="font-size:0.75em; opacity:0.8; font-weight:normal;">(${data.horizon.toUpperCase()})</span>` : '';
+                        row.innerHTML = `<span class="badge ${cls}">${data.signal}${hzStr} ${Math.round(data.confidence)}%</span>`;
                         const span = row.querySelector('span');
                         if (span) span.classList.remove('signal-loading');
                     }

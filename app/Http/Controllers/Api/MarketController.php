@@ -67,19 +67,55 @@ class MarketController extends Controller
     {
         set_time_limit(120); // Prevent PHP killing request before XGBoost finishes on cold start
         $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
+        
+        $horizon = $request->get('horizon', 'default');
         $interval = $request->get('interval', '15m');
-        // 500 klines is sufficient for all indicators (EMA-200, ADX, Ichimoku, etc.)
-        // and shares the same cache key as the page-load chart fetch (limit=500),
-        // avoiding a redundant 40-120 s cold Binance API call.
+        $steps = 5;
+
+        if ($horizon === '30m') {
+            $interval = '30m';
+            $steps = 1;
+        } elseif ($horizon === '1h') {
+            $interval = '1h';
+            $steps = 1;
+        } elseif ($horizon === '4h') {
+            $interval = '4h';
+            $steps = 1;
+        } elseif ($horizon === '24h') {
+            $interval = '1d';
+            $steps = 1;
+        }
+
+        // 500 klines is sufficient for all indicators
         $klines   = $market->getKlines($symbol, $interval, 500);
-        $signal   = $prediction->getScalpingSignal($klines, $symbol, $interval);
+        $signal   = $prediction->getScalpingSignal($klines, $symbol, $interval, [], 50, 1.0, false, $steps);
+        
+        $signal['horizon'] = $horizon;
+        
         return response()->json($signal);
     }
 
     public function batchPredictions(BatchPredictionRequest $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
     {
         $symbols  = $request->get('symbols', []);
+        
+        $horizon = $request->get('horizon', 'default');
         $interval = $request->get('interval', '15m');
+        $steps = 5;
+
+        if ($horizon === '30m') {
+            $interval = '30m';
+            $steps = 1;
+        } elseif ($horizon === '1h') {
+            $interval = '1h';
+            $steps = 1;
+        } elseif ($horizon === '4h') {
+            $interval = '4h';
+            $steps = 1;
+        } elseif ($horizon === '24h') {
+            $interval = '1d';
+            $steps = 1;
+        }
         
         if (is_string($symbols)) {
             $symbols = explode(',', $symbols);
@@ -100,7 +136,11 @@ class MarketController extends Controller
             ];
         }
 
-        $results = $prediction->getBatchSignals($batchKlines, $interval);
+        $results = $prediction->getBatchSignals($batchKlines, $interval, $steps);
+        
+        foreach ($results as $sym => $res) {
+            $results[$sym]['horizon'] = $horizon;
+        }
 
         return response()->json($results);
     }
