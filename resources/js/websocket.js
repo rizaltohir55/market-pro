@@ -8,7 +8,6 @@ export const WebSocketManager = {
     reconnectTimer: null,
     reconnectAttempts: 0,
     maxReconnectAttempts: 10,
-    pingInterval: null,
 
     init() {
         this.url = 'wss://data-stream.binance.vision/ws/!miniTicker@arr';
@@ -41,14 +40,6 @@ export const WebSocketManager = {
         console.log('[WebSocket] Connected to Binance stream');
         this.reconnectAttempts = 0;
         this.updateUI('connected');
-
-        // Setup ping to keep connection alive
-        if (this.pingInterval) clearInterval(this.pingInterval);
-        this.pingInterval = setInterval(() => {
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(JSON.stringify({ method: 'LIST_SUBSCRIPTIONS', id: Date.now() }));
-            }
-        }, 30000);
     },
 
     onMessage(event) {
@@ -73,11 +64,6 @@ export const WebSocketManager = {
     onClose(event) {
         console.log(`[WebSocket] Disconnected (Code: ${event.code})`);
         this.updateUI('disconnected');
-
-        if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
-        }
 
         this.scheduleReconnect();
     },

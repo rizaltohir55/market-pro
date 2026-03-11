@@ -673,6 +673,14 @@ async function fetchPrediction() {
         );
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
+
+        if (data && data.status === 'processing') {
+            if (hudConf) hudConf.textContent = 'ANALYZING…';
+            // Data is being processed by background job; wait and poll again
+            setTimeout(() => { predictionFetching = false; fetchPrediction(); }, 3000);
+            return;
+        }
+
         if (data && data.signal) {
             predictionFetched = true;
             renderPrediction(data);

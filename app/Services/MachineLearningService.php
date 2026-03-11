@@ -41,38 +41,9 @@ class MachineLearningService
         }
 
         $jsonInput = json_encode($inputData);
-        
-        // 2. Fallback to Local proc_open
         $scriptPath = base_path('app/ML/xgboost_engine.py');
         
-        // Using Symfony Process for safer execution, timeouts, and reading stdout
-        $python = $this->getPythonCommand();
-        $process = new Process([$python, $scriptPath]);
-        $process->setInput($jsonInput);
-        $process->setTimeout(60);
-
-        try {
-            $process->mustRun();
-            $output = $this->extractJson($process->getOutput());
-            if (!$output) {
-                return [
-                    'error' => "Failed to parse JSON from Python output. Raw: " . substr($process->getOutput(), 0, 500),
-                    'forecast' => [],
-                    'r_squared' => 0
-                ];
-            }
-            if (isset($output['error'])) {
-                return ['error' => $output['error'], 'forecast' => [], 'r_squared' => 0];
-            }
-            return $output;
-        } catch (ProcessFailedException $e) {
-            $msg = app()->environment('production') ? 'Prediction engine failed' : $e->getMessage();
-            return [
-                'error' => 'Process failed or timed out: ' . $msg,
-                'forecast' => [],
-                'r_squared' => 0
-            ];
-        }
+        return $this->executeLocalPythonScript($scriptPath, $jsonInput, 60, false);
     }
 
     /**
@@ -111,18 +82,7 @@ class MachineLearningService
         $jsonInput = json_encode($inputData);
         $scriptPath = base_path('app/ML/xgboost_engine.py');
         
-        $python = $this->getPythonCommand();
-        $process = new Process([$python, $scriptPath]);
-        $process->setInput($jsonInput);
-        $process->setTimeout(120); // Batch process might take longer
-
-        try {
-            $process->mustRun();
-            return $this->extractJson($process->getOutput()) ?? ['error' => 'Invalid JSON output from Python. Raw: ' . substr($process->getOutput(), 0, 200)];
-        } catch (ProcessFailedException $e) {
-            $msg = app()->environment('production') ? 'Batch prediction engine failed' : $e->getMessage();
-            return ['error' => 'Batch process failed or timed out: ' . $msg];
-        }
+        return $this->executeLocalPythonScript($scriptPath, $jsonInput, 120, true);
     }
 
     /**
@@ -215,15 +175,49 @@ class MachineLearningService
         ];
     }
 
-    /**
-     * Generate Gaussian (Normal) random noise using Box-Muller transform.
-     */
     private function generateGaussianNoise(): float
     {
-        $u1 = (float)mt_rand() / (float)mt_getrandmax();
-        $u2 = (float)mt_rand() / (float)mt_getrandmax();
+        $max = PHP_INT_MAX;
+        $u1 = (float)random_int(0, $max) / $max;
+        $u2 = (float)random_int(0, $max) / $max;
+
+        // Prevent taking log of zero
+        if ($u1 <= 0.0) $u1 = 0.0001; 
         
         return sqrt(-2.0 * log($u1)) * cos(2.0 * M_PI * $u2);
+    }
+
+    /**
+     * Executes a Python script safely using Symfony Process and returns the extracted JSON array.
+     */
+    private function executeLocalPythonScript(string $scriptPath, string $jsonInput, int $timeout, bool $isBatch): array
+    {
+        $python = $this->getPythonCommand();
+        $process = new Process([$python, $scriptPath]);
+        $process->setInput($jsonInput);
+        $process->setTimeout($timeout);
+
+        try {
+            $process->mustRun();
+            $output = $this->extractJson($process->getOutput());
+            
+            if (!$output) {
+                return $isBatch 
+                    ? ['error' => 'Invalid JSON output from Python. Raw: ' . substr($process->getOutput(), 0, 200)]
+                    : ['error' => "Failed to parse JSON from Python output. Raw: " . substr($process->getOutput(), 0, 500), 'forecast' => [], 'r_squared' => 0];
+            }
+            
+            if (!$isBatch && isset($output['error'])) {
+                return ['error' => $output['error'], 'forecast' => [], 'r_squared' => 0];
+            }
+            
+            return $output;
+        } catch (ProcessFailedException $e) {
+            $msg = app()->environment('production') ? ($isBatch ? 'Batch prediction engine failed' : 'Prediction engine failed') : $e->getMessage();
+            return $isBatch
+                ? ['error' => 'Batch process failed or timed out: ' . $msg]
+                : ['error' => 'Process failed or timed out: ' . $msg, 'forecast' => [], 'r_squared' => 0];
+        }
     }
 
     /**

@@ -15,12 +15,19 @@ class PredictionService
         $this->ml = $ml;
     }
 
+    public function getCacheKey(string $symbol, string $interval, int $fearGreed, float $lsRatio, bool $isTrending, int $forecastSteps): string
+    {
+        // Enforce consistent formatting for the cache key to avoid mismatch between batch and single executions
+        $lsStr = number_format($lsRatio, 1, '.', ''); // forces 1.0
+        $contextHash = md5($interval . '_' . $fearGreed . '_' . $lsStr . '_' . ($isTrending ? 'T' : 'R') . '_' . $forecastSteps);
+        $cacheKey = "prediction_v4_" . strtoupper($symbol) . "_" . $contextHash;
+        return $cacheKey;
+    }
+
     public function getScalpingSignal(array $klines, string $symbol = 'UNKNOWN', string $interval = '15m', array $htfKlines = [], int $fearGreed = 50, float $lsRatio = 1.0, bool $isTrending = false, int $forecastSteps = 5): array
     {
         $symbol = strtoupper($symbol);
-        // Include macro context in cache key to ensure predictions are context-aware
-        $contextHash = md5($interval . '_' . $fearGreed . '_' . round($lsRatio, 2) . ($isTrending ? 'T' : 'R') . '_' . $forecastSteps);
-        $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
+        $cacheKey = $this->getCacheKey($symbol, $interval, $fearGreed, $lsRatio, $isTrending, $forecastSteps);
         
         return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending, $forecastSteps) {
             return $this->calculateSignal($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending, null, $forecastSteps);
@@ -39,8 +46,7 @@ class PredictionService
         foreach ($symbolData as $symbol => $data) {
             $symbol = strtoupper($symbol);
             // Since batch signals often use default macro values (50, 1.0, false), we use a stable hash
-            $contextHash = md5($interval . '_50_1.0_R_' . $forecastSteps);
-            $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
+            $cacheKey = $this->getCacheKey($symbol, $interval, 50, 1.0, false, $forecastSteps);
             
             $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
             if ($cached) {
@@ -70,8 +76,7 @@ class PredictionService
             
             $signal = $this->calculateSignal($klines, $symbol, $interval, $htfKlines, 50, 1.0, false, $mlResult, $forecastSteps);
             
-            $contextHash = md5($interval . '_50_1.0_R_' . $forecastSteps);
-            $cacheKey = "prediction_v4_{$symbol}_{$contextHash}";
+            $cacheKey = $this->getCacheKey($symbol, $interval, 50, 1.0, false, $forecastSteps);
             \Illuminate\Support\Facades\Cache::put($cacheKey, $signal, 300);
             $batchResults[$symbol] = $signal;
         }

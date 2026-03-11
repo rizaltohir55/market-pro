@@ -2,11 +2,12 @@ import sys
 import json
 import os
 import warnings
-from ml_core import run_prediction_pipeline
 
-# Suppress warnings to keep stdout clean for JSON
+# Suppress warnings to keep stdout clean for JSON before importing ML libraries
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+from ml_core import run_prediction_pipeline
 
 def main():
     try:

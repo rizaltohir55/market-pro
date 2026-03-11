@@ -62,7 +62,7 @@ class MarketController extends Controller
         $data = $market->getTopPairs(50);
         return response()->json($data);
     }
-    private function getHorizonSettings(string $horizon): array 
+    private function resolveHorizonSettings(string $horizon): array 
     {
         return match ($horizon) {
             '30m' => ['interval' => '30m', 'steps' => 1],
@@ -77,22 +77,33 @@ class MarketController extends Controller
     {
         $symbol   = strtoupper($request->get('symbol', 'BTCUSDT'));
         $horizon = $request->get('horizon', 'default');
-        ['interval' => $interval, 'steps' => $steps] = $this->getHorizonSettings($horizon);
+        ['interval' => $interval, 'steps' => $steps] = $this->resolveHorizonSettings($horizon);
 
-        // 500 klines is sufficient for all indicators
-        $klines   = $market->getKlines($symbol, $interval, 500);
-        $signal   = $prediction->getScalpingSignal($klines, $symbol, $interval, [], 50, 1.0, false, $steps);
-        
-        $signal['horizon'] = $horizon;
-        
-        return response()->json($signal);
+        $cacheKey = $prediction->getCacheKey($symbol, $interval, 50, 1.0, false, $steps);
+
+        if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+            $signal = \Illuminate\Support\Facades\Cache::get($cacheKey);
+            $signal['horizon'] = $horizon;
+            return response()->json($signal);
+        }
+
+        $lockKey = "lock_{$cacheKey}";
+        if (\Illuminate\Support\Facades\Cache::add($lockKey, true, 180)) {
+            \App\Jobs\GeneratePredictionJob::dispatch($symbol, $horizon, $interval, $steps);
+        }
+
+        return response()->json([
+            'status'  => 'processing',
+            'message' => 'Prediction is being generated in the background. Please poll again shortly.',
+            'horizon' => $horizon
+        ], 202);
     }
 
     public function batchPredictions(BatchPredictionRequest $request, MultiSourceMarketService $market, PredictionService $prediction): JsonResponse
     {
         $symbols  = $request->get('symbols', []);
         $horizon = $request->get('horizon', 'default');
-        ['interval' => $interval, 'steps' => $steps] = $this->getHorizonSettings($horizon);
+        ['interval' => $interval, 'steps' => $steps] = $this->resolveHorizonSettings($horizon);
         if (is_string($symbols)) {
             $symbols = explode(',', $symbols);
         }
@@ -105,24 +116,36 @@ class MarketController extends Controller
             return is_scalar($s) ? trim((string)$s) : '';
         }, $symbols)), 0, 50);
         
-        // Batch pulling klines for multiple symbols requires a lot of memory before
-        // the python process picks it up. Temporarily bump limit to 512M if needed.
-        ini_set('memory_limit', '512M');
+        $allCached = true;
+        $results = [];
 
-        $batchKlines = [];
         foreach ($symbols as $symbol) {
-            $batchKlines[strtoupper($symbol)] = [
-                'klines' => $market->getKlines($symbol, $interval, 1000)
-            ];
+            $cacheKey = $prediction->getCacheKey($symbol, $interval, 50, 1.0, false, $steps);
+            if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                $results[$symbol] = \Illuminate\Support\Facades\Cache::get($cacheKey);
+                $results[$symbol]['horizon'] = $horizon;
+            } else {
+                $allCached = false;
+            }
         }
 
-        $results = $prediction->getBatchSignals($batchKlines, $interval, $steps);
+        if ($allCached) {
+            return response()->json($results);
+        }
         
-        foreach ($results as $sym => $res) {
-            $results[$sym]['horizon'] = $horizon;
+        $batchHash = md5(implode(',', $symbols) . $interval . $steps);
+        $lockKey = "lock_batch_{$batchHash}";
+        
+        if (\Illuminate\Support\Facades\Cache::add($lockKey, true, 300)) {
+            \App\Jobs\GenerateBatchPredictionJob::dispatch($symbols, $horizon, $interval, $steps);
         }
 
-        return response()->json($results);
+        return response()->json([
+            'status'          => 'processing',
+            'message'         => 'Batch predictions are being generated in the background.',
+            'horizon'         => $horizon,
+            'partial_results' => $results
+        ], 202);
     }
 
     /**

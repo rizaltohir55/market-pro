@@ -34,8 +34,7 @@ class BroadcastMarketData extends Command
         MultiSourceMarketService $market,
         ForexMarketService $forexMarket,
         BondMarketService $bondMarket,
-        CommodityMarketService $commodityMarket,
-        PredictionService $prediction
+        CommodityMarketService $commodityMarket
     ) {
         $symbol = strtoupper($this->option('symbol'));
         $this->info("Starting broadcast for $symbol...");
@@ -67,9 +66,6 @@ class BroadcastMarketData extends Command
 
                 $payload['trading'] = [
                     'ticker' => $ticker,
-                    'depth'  => $market->getDepth($symbol, 20),
-                    'trades' => $market->getRecentTrades($symbol, 50),
-                    'prediction' => $prediction->getScalpingSignal($klines15m, $symbol, '15m', $klines1h, $fearGreed, $lsRatio, $isTrending),
                 ];
 
                 // Watchlist & Shared
