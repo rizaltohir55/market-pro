@@ -149,16 +149,8 @@ class MarketController extends Controller
      * Get deep historical crypto klines with optional startTime/endTime.
      * Supports up to 1000 candles via Binance (real data, no synthetic fallback).
      */
-    public function klinesHistory(Request $request, CryptoMarketService $cryptoMarket): JsonResponse
+    public function klinesHistory(MarketRequest $request, CryptoMarketService $cryptoMarket): JsonResponse
     {
-        $request->validate([
-            'symbol'   => 'nullable|string|max:20',
-            'interval' => 'nullable|string|max:10',
-            'limit'    => 'nullable|integer|min:1|max:1000',
-            'from'     => 'nullable|integer',
-            'to'       => 'nullable|integer',
-        ]);
-
         $symbol    = strtoupper($request->get('symbol', 'BTCUSDT'));
         $interval  = $request->get('interval', '1d');
         $limit     = max(1, min((int) $request->get('limit', 365), 1000));
@@ -485,17 +477,12 @@ class MarketController extends Controller
             return response()->json(['error' => 'Unauthenticated'], 401);
         }
 
+        $request->validate([
+            'url' => ['required', 'url', 'regex:/^https?:\/\//i']
+        ]);
+
         $userId = $request->user()->id;
         $url    = $request->input('url');
-
-        if (!$url) {
-            return response()->json(['error' => 'URL is required'], 400);
-        }
-
-        // Sanitize: only allow http/https URLs
-        if (!filter_var($url, FILTER_VALIDATE_URL) || !preg_match('/^https?:\/\//i', $url)) {
-            return response()->json(['error' => 'Invalid URL'], 422);
-        }
 
         $existing = \App\Models\SavedArticle::where('user_id', $userId)
                         ->where('url', $url)

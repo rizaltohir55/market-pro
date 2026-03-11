@@ -404,7 +404,10 @@ function formatPrice(price) {
 // ─── BINANCE WEBSOCKET FOR REALTIME CHART ─────────────────────
 let binanceWS = null;
 function initBinanceWS() {
-    if (binanceWS) binanceWS.close();
+    if (binanceWS) {
+        binanceWS.onclose = null; // Prevent exponential reconnect loop
+        binanceWS.close();
+    }
     
     // For analysis page, the user looks at the 15m chart.
     binanceWS = new WebSocket(`wss://data-stream.binance.vision/ws/${SYMBOL.toLowerCase()}@kline_15m`);

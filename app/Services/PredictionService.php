@@ -114,22 +114,119 @@ class PredictionService
 
         $adxData = $this->ta->calculateADX($klines);
         $lastAdx = !empty($adxData['adx']) ? end($adxData['adx']) : 20.0;
-        $trendStrength = 'UNKNOWN';
+        
+        $trendStrength = $this->determineTrendStrength($lastAdx);
         $isStrongTrend = $lastAdx > 30 || $currSt['trend'] != 0; 
+        
+        $categories = $this->initializeCategories($lastAdx, $currSt);
+        $indicatorsList = [];
 
-        if ($lastAdx < 20) $trendStrength = 'WEAK';
-        elseif ($lastAdx < 40) $trendStrength = 'MODERATE';
-        elseif ($lastAdx < 60) $trendStrength = 'STRONG';
-        else $trendStrength = 'VERY STRONG';
+        // Evaluate sub-components
+        $this->evaluateTrendIndicators($categories, $indicatorsList, $klines, $closes, $currentPrice, $adxData, $lastAdx);
+        $this->evaluateMomentumIndicators($categories, $indicatorsList, $klines, $closes, $isStrongTrend);
+        $this->evaluatePriceActionIndicators($categories, $indicatorsList, $klines);
+        $this->evaluateMacdIndicators($categories, $indicatorsList, $closes);
+        $this->evaluateVolumeIndicators($categories, $indicatorsList, $klines, $closes, $currentPrice);
+        
+        $bb = $this->ta->calculateBollingerBands($closes);
+        $fibPivots = $this->ta->calculateFibonacciPivots($klines);
+        $this->evaluateStructureIndicators($categories, $indicatorsList, $currentPrice, $bb, $fibPivots);
 
-        // NEW: Dynamic ADX Weighting
+        // Advanced mechanics
+        $fractalPenalty = 1.0;
+        $hurst = 0.5;
+        $this->evaluateAdvancedIndicators($categories, $indicatorsList, $closes, $currentPrice, $denoisedPrice, $currSt, $fractalPenalty, $hurst);
+
+        // ML Predictions
+        $lr = ['slope' => 0, 'intercept' => 0, 'r_squared' => 0]; 
+        $mc = ['median' => $currentPrice];
+        $mlResult = $precomputedML ?? $this->ml->predictXGBoost($klines, $forecastSteps);
+        $this->evaluateMachineLearning($categories, $indicatorsList, $closes, $currentPrice, $forecastSteps, $mlResult, $lr, $mc);
+
+        // Compute Multi-Layer Scores
+        $totalBuy = 0; $totalSell = 0;
+        $categoryScores = [];
+        $this->computeCategoryScores($categories, $totalBuy, $totalSell, $categoryScores);
+
+        // Squeeze Momentum
+        $currSqueeze = $this->evaluateSqueezeMomentum($indicatorsList, $klines, $totalBuy, $totalSell);
+
+        // Determine Base Signal
+        $confidence = max($totalBuy, $totalSell) * $fractalPenalty;
+        $overallSignal = $this->determineBaseSignal($totalBuy, $totalSell);
+
+        // Apply Hard Filters (Volatility, Trend Alignment, ML Divergence)
+        $volatilityFilter = $this->applyVolatilityFilter($indicatorsList, $klines, $confidence, $overallSignal);
+        $this->applyContextualConflunceCheck($overallSignal, $confidence, $volatilityFilter, $currSt, $lr, $currSqueeze, $denoisedPrice, $currentPrice, $totalBuy, $totalSell);
+
+        $marketRegime = $this->determineMarketRegime($currSqueeze, $trendStrength, $bb, $currentPrice);
+
+        // Final Confluence Checks
+        $htfAligned = $this->applyHTFConfluence($indicatorsList, $htfKlines, $overallSignal, $confidence);
+        $persistence = $this->handleSignalPersistence($symbol, $interval, $overallSignal);
+        $this->applyNewsImpactFilter($indicatorsList, $overallSignal, $confidence);
+
+        $isBuy = str_contains($overallSignal, 'BUY');
+        
+        // Target & Stop Loss Levels
+        $k_scaling = max(1.0, $forecastSteps / 5);
+        $levels = $this->ta->calculateDynamicTPBL($klines, $isBuy ? 'BUY' : 'SELL', 1.5 * $k_scaling, 1.0 * $k_scaling);
+        $trailingStop = $this->ta->calculateTrailingStopATR($klines, $isBuy ? 'BUY' : 'SELL', 2.0);
+        
+        $tp = $levels['tp'];
+        $sl = $levels['sl'];
+        
+        $riskReward = $this->calculateRiskReward($currentPrice, $tp, $sl);
+        $this->applyRiskRewardFilter($indicatorsList, $overallSignal, $confidence, $riskReward);
+
+        return [
+            'signal' => $overallSignal,
+            'confidence' => round($confidence, 1),
+            'buy_score' => round($totalBuy, 1),
+            'sell_score' => round($totalSell, 1),
+            'indicators' => $indicatorsList,
+            'categories' => $categoryScores,
+            'price' => $currentPrice,
+            'tp' => $tp,
+            'sl' => $sl,
+            'target' => $tp, // Alias for frontend
+            'stop_loss' => $sl, // Alias for frontend
+            'trailing_stop' => round($trailingStop, 2),
+            'persistence' => $persistence,
+            'htf_aligned' => $htfAligned,
+            'risk_reward' => round($riskReward, 2),
+            'trend_strength' => $trendStrength,
+            'market_regime' => $marketRegime,
+            'ml_forecast' => [
+                'linear_regression' => $lr,
+                'monte_carlo' => $mc
+            ],
+            'hurst' => $hurst,
+            'forecast_path' => $this->ta->calculateForecastCorridor(
+                $currentPrice, 
+                $mlResult['forecast'] ?? ($lr['slope'] != 0 ? array_map(fn($i) => $currentPrice + ($lr['slope'] * $i), range(1, $forecastSteps)) : []),
+                $levels['atr'] ?? ($currentPrice * 0.01),
+                $isBuy ? 'BUY' : 'SELL'
+            ),
+            'summary' => "Engine V4.2 (Multi-Step): {$overallSignal}. RR: " . round($riskReward, 2) . ". Consistency: {$persistence} bars. Market is {$marketRegime}. R2: " . round($mlResult['r_squared'] ?? 0, 2) . "."
+        ];
+    }
+    
+    private function determineTrendStrength(float $lastAdx): string 
+    {
+        if ($lastAdx < 20) return 'WEAK';
+        if ($lastAdx < 40) return 'MODERATE';
+        if ($lastAdx < 60) return 'STRONG';
+        return 'VERY STRONG';
+    }
+
+    private function initializeCategories(float $lastAdx, array $currSt): array 
+    {
         $adxWeightBoost = 0;
         if ($lastAdx > 35) $adxWeightBoost = 10;
         elseif ($lastAdx > 25) $adxWeightBoost = 5;
 
-        $regimeForWeighting = 'UNKNOWN';
         if ($lastAdx < 25 && $currSt['trend'] == 0) {
-            $regimeForWeighting = 'RANGING';
             $weightTrend = 10;
             $weightMomentum = 30;
             $weightMACD = 10;
@@ -137,7 +234,6 @@ class PredictionService
             $weightStructure = 20;
             $weightPriceAction = 15;
         } else {
-            $regimeForWeighting = 'TRENDING';
             $weightTrend = 40 + $adxWeightBoost;
             $weightMomentum = 10; 
             $weightMACD = 15;
@@ -146,19 +242,19 @@ class PredictionService
             $weightPriceAction = 10;
         }
 
-        $categories = [
-            'Trend' => ['buy' => 0, 'sell' => 0, 'weight' => $weightTrend, 'indicators' => []],
-            'Momentum' => ['buy' => 0, 'sell' => 0, 'weight' => $weightMomentum, 'indicators' => []],
-            'MACD' => ['buy' => 0, 'sell' => 0, 'weight' => $weightMACD, 'indicators' => []],
-            'Volume' => ['buy' => 0, 'sell' => 0, 'weight' => $weightVolume, 'indicators' => []],
-            'Structure' => ['buy' => 0, 'sell' => 0, 'weight' => $weightStructure, 'indicators' => []],
-            'Price Action' => ['buy' => 0, 'sell' => 0, 'weight' => $weightPriceAction, 'indicators' => []],
-            'Advanced' => ['buy' => 0, 'sell' => 0, 'weight' => 25, 'indicators' => []],
+        return [
+            'Trend' => ['buy' => 0, 'sell' => 0, 'weight' => $weightTrend],
+            'Momentum' => ['buy' => 0, 'sell' => 0, 'weight' => $weightMomentum],
+            'MACD' => ['buy' => 0, 'sell' => 0, 'weight' => $weightMACD],
+            'Volume' => ['buy' => 0, 'sell' => 0, 'weight' => $weightVolume],
+            'Structure' => ['buy' => 0, 'sell' => 0, 'weight' => $weightStructure],
+            'Price Action' => ['buy' => 0, 'sell' => 0, 'weight' => $weightPriceAction],
+            'Advanced' => ['buy' => 0, 'sell' => 0, 'weight' => 25],
         ];
+    }
 
-        $indicatorsList = [];
-
-        // --- 1. TREND ---
+    private function evaluateTrendIndicators(array &$categories, array &$indicatorsList, array $klines, array $closes, float $currentPrice, array $adxData, float $lastAdx): void
+    {
         $wEmaShort = $categories['Trend']['weight'] * 0.3;
         $ema9Arr = $this->ta->calculateEMA($closes, 9);
         $ema9 = end($ema9Arr);
@@ -208,8 +304,12 @@ class PredictionService
             } else { $sig = 'NEUTRAL'; }
             $indicatorsList[] = ['name' => 'ADX', 'value' => round($lastAdx,1), 'signal' => $sig];
         }
+    }
 
-        // --- 2. MOMENTUM ---
+    private function evaluateMomentumIndicators(array &$categories, array &$indicatorsList, array $klines, array $closes, bool $isStrongTrend): void
+    {
+        $weightMomentum = $categories['Momentum']['weight'];
+        
         $wRsi = $weightMomentum * 0.3;
         $rsiArr = $this->ta->calculateRSI($closes);
         $rsi = end($rsiArr);
@@ -225,7 +325,6 @@ class PredictionService
         }
         $indicatorsList[] = ['name' => 'RSI', 'value' => round($rsi, 1), 'signal' => $sig];
 
-        // NEW: RSI Divergence
         $wDiv = $weightMomentum * 0.4;
         $div = $this->ta->detectDivergence($closes, $rsiArr);
         if ($div === 'BULLISH_DIVERGENCE') {
@@ -251,8 +350,11 @@ class PredictionService
             }
             $indicatorsList[] = ['name' => 'Stochastic', 'value' => round($k,1).'/'.round($d,1), 'signal' => $sig];
         }
+    }
 
-        // --- 3. PRICE ACTION ---
+    private function evaluatePriceActionIndicators(array &$categories, array &$indicatorsList, array $klines): void
+    {
+        $weightPriceAction = $categories['Price Action']['weight'];
         $patterns = $this->ta->detectCandlestickPatterns($klines);
         foreach ($patterns as $pattern) {
             if ($pattern === 'BULLISH_ENGULFING') {
@@ -269,9 +371,11 @@ class PredictionService
                 $indicatorsList[] = ['name' => 'Price Action', 'value' => 'Shooting Star', 'signal' => 'SELL'];
             }
         }
+    }
 
-        // --- 4. MACD ---
-        $wMacd = $weightMACD;
+    private function evaluateMacdIndicators(array &$categories, array &$indicatorsList, array $closes): void
+    {
+        $wMacd = $categories['MACD']['weight'];
         $macdData = $this->ta->calculateMACD($closes);
         if (!empty($macdData['histogram'])) {
             $macdLine = end($macdData['macd']);
@@ -285,8 +389,12 @@ class PredictionService
             else { $categories['MACD']['sell'] += ($wMacd/2); $sig = 'BEARISH'; }
             $indicatorsList[] = ['name' => 'MACD', 'value' => round($macdLine, 3), 'signal' => $sig];
         }
+    }
 
-        // --- 5. VOLUME ---
+    private function evaluateVolumeIndicators(array &$categories, array &$indicatorsList, array $klines, array $closes, float $currentPrice): void
+    {
+        $weightVolume = $categories['Volume']['weight'];
+        
         $wObv = $weightVolume * 0.25;
         $obv = $this->ta->calculateOBV($klines);
         $obvM = end($obv); $prevObv = $obv[count($obv)-2] ?? $obvM;
@@ -319,10 +427,13 @@ class PredictionService
             $categories['Volume']['sell'] += $wSpike; 
             $indicatorsList[] = ['name' => 'Volume Anomaly', 'value' => 'Bearish Dump', 'signal' => 'STRONG SELL'];
         }
+    }
 
-        // --- 6. STRUCTURE ---
+    private function evaluateStructureIndicators(array &$categories, array &$indicatorsList, float $currentPrice, array $bb, array $fibPivots): void
+    {
+        $weightStructure = $categories['Structure']['weight'];
+        
         $wBB = $weightStructure * 0.50;
-        $bb = $this->ta->calculateBollingerBands($closes);
         if (!empty($bb['upper'])) {
             $upper = end($bb['upper']); $lower = end($bb['lower']);
             if ($currentPrice <= $lower * 1.005) { $categories['Structure']['buy'] += $wBB; $sig = 'BUY'; }
@@ -332,7 +443,6 @@ class PredictionService
         }
         
         $wFib = $weightStructure * 0.50;
-        $fibPivots = $this->ta->calculateFibonacciPivots($klines);
         if (!empty($fibPivots)) {
             $distToS1 = abs($currentPrice - $fibPivots['s1']);
             $distToR1 = abs($currentPrice - $fibPivots['r1']);
@@ -341,8 +451,10 @@ class PredictionService
             else { $sig = 'NEUTRAL'; }
             $indicatorsList[] = ['name' => 'Fibonacci Pivots', 'value' => 'S1/R1 Zone', 'signal' => $sig];
         }
+    }
 
-        // --- 7. ADVANCED & STATISTICAL ---
+    private function evaluateAdvancedIndicators(array &$categories, array &$indicatorsList, array $closes, float $currentPrice, float $denoisedPrice, array $currSt, float &$fractalPenalty, float &$hurst): void
+    {
         $hurst = $this->ta->calculateHurstExponent($closes);
         $fractal = $this->ta->calculateFractalDimension($closes);
         
@@ -352,38 +464,34 @@ class PredictionService
         $indicatorsList[] = ['name' => 'Hurst Exponent', 'value' => round($hurst, 2), 'signal' => $hurstSig];
 
         $fractalSig = 'NEUTRAL';
-        // NEW: Fractal complexity penalty/bonus
-        $fractalPenalty = 1.0;
         if ($fractal > 1.65) { 
             $fractalSig = 'COMPLEX/VOLATILE'; 
-            $fractalPenalty = 0.7; // Market is too complex, reduce overall confidence
+            $fractalPenalty = 0.7; 
         } elseif ($fractal < 1.4) { 
             $fractalSig = 'EFFICIENT'; 
-            $fractalPenalty = 1.1; // Market is efficient, boost confidence
+            $fractalPenalty = 1.1; 
         }
         $indicatorsList[] = ['name' => 'Fractal Dim', 'value' => round($fractal, 2), 'signal' => $fractalSig];
 
-        // NEW: SuperTrend Signal (Calibration)
         $stSig = 'NEUTRAL';
         if ($currSt['trend'] == 1) { $categories['Advanced']['buy'] += 12; $stSig = 'BULLISH'; }
         elseif ($currSt['trend'] == -1) { $categories['Advanced']['sell'] += 12; $stSig = 'BEARISH'; }
         $indicatorsList[] = ['name' => 'SuperTrend', 'value' => round($currSt['value'], 2), 'signal' => $stSig];
 
-        // NEW: Kalman Alignment
         $kalmanSig = 'NEUTRAL';
         if ($denoisedPrice > $currentPrice * 1.001) { $categories['Trend']['buy'] += 6; $kalmanSig = 'UPWARD'; }
         elseif ($denoisedPrice < $currentPrice * 0.999) { $categories['Trend']['sell'] += 6; $kalmanSig = 'DOWNWARD'; }
         $indicatorsList[] = ['name' => 'Kalman Denoise', 'value' => 'Smooth', 'signal' => $kalmanSig];
+    }
 
-        // XGBoost Forecast (Real ML)
-        $mlResult = $precomputedML ?? $this->ml->predictXGBoost($klines, $forecastSteps);
+    private function evaluateMachineLearning(array &$categories, array &$indicatorsList, array $closes, float $currentPrice, int $forecastSteps, array $mlResult, array &$lr, array &$mc): void
+    {
         $mlSig = 'NEUTRAL';
-        $lr = ['slope' => 0, 'intercept' => 0, 'r_squared' => 0]; 
         
         if (!isset($mlResult['error'])) {
             $forecast = $mlResult['forecast'];
             $r2 = $mlResult['r_squared'];
-            $lastPred = end($forecast);
+            $lastPred = !empty($forecast) ? end($forecast) : $currentPrice;
             if ($lastPred > $currentPrice && $r2 > 0.5) { $categories['Advanced']['buy'] += 15; $mlSig = 'BULLISH (XGB)'; }
             elseif ($lastPred < $currentPrice && $r2 > 0.5) { $categories['Advanced']['sell'] += 15; $mlSig = 'BEARISH (XGB)'; }
             $indicatorsList[] = ['name' => 'XGBoost ML', 'value' => 'R2:'.round($r2, 2), 'signal' => $mlSig];
@@ -395,16 +503,15 @@ class PredictionService
             $indicatorsList[] = ['name' => 'Legacy ML', 'value' => 'Fallback', 'signal' => $mlSig];
         }
 
-        // Monte Carlo Simulation
         $mc = $this->ml->runMonteCarlo($closes, 20, 1000);
         $mcSig = 'NEUTRAL';
         if ($mc['median'] > $currentPrice) { $categories['Advanced']['buy'] += 5; $mcSig = 'PROB BULLISH'; }
         else { $categories['Advanced']['sell'] += 5; $mcSig = 'PROB BEARISH'; }
         $indicatorsList[] = ['name' => 'Monte Carlo', 'value' => '$'.round($mc['median'], 2), 'signal' => $mcSig];
+    }
 
-        // Compute Multi-Layer Scores
-        $totalBuy = 0; $totalSell = 0;
-        $categoryScores = [];
+    private function computeCategoryScores(array $categories, float &$totalBuy, float &$totalSell, array &$categoryScores): void
+    {
         foreach ($categories as $cat => $sc) {
             $totalBuy += $sc['buy'];
             $totalSell += $sc['sell'];
@@ -421,8 +528,10 @@ class PredictionService
                 'signal' => $catSig
             ];
         }
+    }
 
-        // --- 8. SQUEEZE MOMENTUM CONFLUENCE ---
+    private function evaluateSqueezeMomentum(array &$indicatorsList, array $klines, float &$totalBuy, float &$totalSell): array
+    {
         $squeezeArr = $this->ta->calculateSqueezeMomentum($klines);
         $currSqueeze = !empty($squeezeArr) ? end($squeezeArr) : ['is_squeeze' => false, 'momentum' => 0];
         $squeezeSig = 'NEUTRAL';
@@ -434,50 +543,52 @@ class PredictionService
             elseif ($currSqueeze['momentum'] < 0) { $totalSell += 10; $squeezeSig = 'BEARISH RELEASE'; }
         }
         $indicatorsList[] = ['name' => 'Squeeze Momentum', 'value' => $currSqueeze['is_squeeze'] ? 'ON' : 'OFF', 'signal' => $squeezeSig];
+        return $currSqueeze;
+    }
 
-        // Apply Fractal Penalty to Confidence
-        $confidence = max($totalBuy, $totalSell) * $fractalPenalty;
+    private function determineBaseSignal(float $totalBuy, float $totalSell): string
+    {
         if ($totalBuy > $totalSell && $totalBuy >= 40) {
-            $overallSignal = ($totalBuy >= 75) ? 'ULTRA BUY' : (($totalBuy >= 60) ? 'STRONG BUY' : 'BUY');
+            return ($totalBuy >= 75) ? 'ULTRA BUY' : (($totalBuy >= 60) ? 'STRONG BUY' : 'BUY');
         } elseif ($totalSell > $totalBuy && $totalSell >= 40) {
-            $overallSignal = ($totalSell >= 75) ? 'ULTRA SELL' : (($totalSell >= 60) ? 'STRONG SELL' : 'SELL');
-        } else {
-            $overallSignal = 'NEUTRAL';
+            return ($totalSell >= 75) ? 'ULTRA SELL' : (($totalSell >= 60) ? 'STRONG SELL' : 'SELL');
         }
+        return 'NEUTRAL';
+    }
 
-        // --- 9. VOLATILITY FILTER (Whipsaw Prevention) ---
-        $volatilityFilter = false;
+    private function applyVolatilityFilter(array &$indicatorsList, array $klines, float &$confidence, string &$overallSignal): bool
+    {
         $atrHist = $this->ta->calculateATR($klines, 14);
         if (!empty($atrHist)) {
             $lastAtr = end($atrHist);
-            // Calculate mean ATR of last 50 periods
-            $meanAtr = array_sum(array_slice($atrHist, -50)) / 50;
+            $slicedAtr = array_slice($atrHist, -50);
+            $countAtr = count($slicedAtr);
+            $meanAtr = $countAtr > 0 ? array_sum($slicedAtr) / $countAtr : 0;
             if ($lastAtr > $meanAtr * 2.5) {
-                $volatilityFilter = true;
                 $confidence *= 0.5;
                 $overallSignal .= " (High Vol Risk)";
                 $indicatorsList[] = ['name' => 'Volatility Filter', 'value' => 'Extreme', 'signal' => 'DANGER'];
+                return true;
             }
         }
+        return false;
+    }
 
-        // Confluence Check (Multi-Stage)
+    private function applyContextualConflunceCheck(string &$overallSignal, float &$confidence, bool $volatilityFilter, array $currSt, array $lr, array $currSqueeze, float $denoisedPrice, float $currentPrice, float $totalBuy, float $totalSell): void
+    {
         if ($overallSignal !== 'NEUTRAL' && !$volatilityFilter) {
             $isBuy = str_contains($overallSignal, 'BUY');
             
-            // 1. Trend/Regime Alignment
             if (($isBuy && $currSt['trend'] == -1) || (!$isBuy && $currSt['trend'] == 1)) {
                 $confidence *= 0.6; // Counter-trend penalty increased
                 $overallSignal .= " (C-Trend)";
             }
             
-            // 2. ML Divergence
             if (($isBuy && $lr['slope'] < 0) || (!$isBuy && $lr['slope'] > 0)) {
                 $confidence *= 0.7;
                 $overallSignal .= " (ML Div)";
             }
             
-            // 3. Absolute Confluence -> Upgrade to ULTRA
-            // Require Squeeze Release or strong momentum
             $hasSqueezeConfluence = !$currSqueeze['is_squeeze'] && (($isBuy && $currSqueeze['momentum'] > 0) || (!$isBuy && $currSqueeze['momentum'] < 0));
             
             if ($isBuy && $currSt['trend'] == 1 && $denoisedPrice > $currentPrice && $totalBuy > 80 && $hasSqueezeConfluence) {
@@ -488,12 +599,21 @@ class PredictionService
                 $confidence = min(100, $confidence + 15);
             }
         }
+    }
 
+    private function determineMarketRegime(array $currSqueeze, string $trendStrength, array $bb, float $currentPrice): string
+    {
         $marketRegime = $currSqueeze['is_squeeze'] ? 'SQUEEZING' : 'TRENDING';
-        if ($trendStrength === 'WEAK' && !$currSqueeze['is_squeeze']) $marketRegime = 'RANGING';
-        elseif (isset($upper, $lower) && ($upper - $lower) / $currentPrice > 0.05) $marketRegime = 'VOLATILE';
+        if ($trendStrength === 'WEAK' && !$currSqueeze['is_squeeze']) {
+            $marketRegime = 'RANGING';
+        } elseif (isset($bb['upper'], $bb['lower']) && (end($bb['upper']) - end($bb['lower'])) / $currentPrice > 0.05) {
+            $marketRegime = 'VOLATILE';
+        }
+        return $marketRegime;
+    }
 
-        // --- 10. MULTI-TIMEFRAME (HTF) CONFLUENCE ---
+    private function applyHTFConfluence(array &$indicatorsList, array $htfKlines, string &$overallSignal, float &$confidence): bool
+    {
         $htfAligned = false;
         if (!empty($htfKlines) && count($htfKlines) >= 200) {
             $htfCloses = array_column($htfKlines, 'close');
@@ -520,8 +640,11 @@ class PredictionService
                 }
             }
         }
+        return $htfAligned;
+    }
 
-        // --- 11. SIGNAL PERSISTENCE ---
+    private function handleSignalPersistence(string $symbol, string $interval, string $overallSignal): int
+    {
         $prevSignal = \Illuminate\Support\Facades\Cache::get("last_sig_{$symbol}_{$interval}");
         $persistence = (int) \Illuminate\Support\Facades\Cache::get("sig_persist_{$symbol}_{$interval}", 0);
         
@@ -532,8 +655,11 @@ class PredictionService
             \Illuminate\Support\Facades\Cache::put("last_sig_{$symbol}_{$interval}", $overallSignal, 600);
         }
         \Illuminate\Support\Facades\Cache::put("sig_persist_{$symbol}_{$interval}", $persistence, 600);
+        return $persistence;
+    }
 
-        // --- 12. NEWS IMPACT FILTER ---
+    private function applyNewsImpactFilter(array &$indicatorsList, string &$overallSignal, float &$confidence): void
+    {
         $events = $this->calendar->getEconomicCalendar();
         $now = time();
         foreach ($events as $event) {
@@ -545,64 +671,21 @@ class PredictionService
                 break; 
             }
         }
-        // --- 13. DYNAMIC ACCURACY TP/SL ---
-        $isBuy = str_contains($overallSignal, 'BUY');
+    }
 
-        // NEW: Dynamic Multipliers based on Forecast Horizon
-        // If forecastSteps is 5, we use 1.0x ATR for SL and 1.5x for TP.
-        // If forecastSteps is 20, we scale up slightly.
-        $k_scaling = max(1.0, $forecastSteps / 5);
-        $tpMult = 1.5 * $k_scaling;
-        $slMult = 1.0 * $k_scaling;
-
-        $levels = $this->ta->calculateDynamicTPBL($klines, $isBuy ? 'BUY' : 'SELL', $tpMult, $slMult);
-        
-        $trailingStop = $this->ta->calculateTrailingStopATR($klines, $isBuy ? 'BUY' : 'SELL', 2.0);
-        
-        $tp = $levels['tp'];
-        $sl = $levels['sl'];
-        
-        // Calculate actual Risk/Reward
+    private function calculateRiskReward(float $currentPrice, float $tp, float $sl): float
+    {
         $risk = abs($currentPrice - $sl);
         $reward = abs($tp - $currentPrice);
-        $riskReward = $risk > 0 ? $reward / $risk : 0;
+        return $risk > 0 ? $reward / $risk : 0;
+    }
 
-        // --- 14. RISK-REWARD FILTER ---
+    private function applyRiskRewardFilter(array &$indicatorsList, string &$overallSignal, float &$confidence, float $riskReward): void
+    {
         if ($overallSignal !== 'NEUTRAL' && $riskReward < 1.3) {
             $confidence *= 0.5;
             $overallSignal .= " (Low RR)";
             $indicatorsList[] = ['name' => 'RR Filter', 'value' => round($riskReward, 2), 'signal' => 'POOR'];
         }
-         return [
-             'signal' => $overallSignal,
-             'confidence' => round($confidence, 1),
-             'buy_score' => round($totalBuy, 1),
-             'sell_score' => round($totalSell, 1),
-             'indicators' => $indicatorsList,
-             'categories' => $categoryScores,
-             'price' => $currentPrice,
-            'tp' => $tp,
-            'sl' => $sl,
-            'target' => $tp, // Alias for frontend
-            'stop_loss' => $sl, // Alias for frontend
-            'trailing_stop' => round($trailingStop, 2),
-            'persistence' => $persistence,
-            'htf_aligned' => $htfAligned,
-            'risk_reward' => round($riskReward, 2),
-            'trend_strength' => $trendStrength,
-            'market_regime' => $marketRegime,
-            'ml_forecast' => [
-                'linear_regression' => $lr,
-                'monte_carlo' => $mc
-            ],
-            'hurst' => $hurst,
-            'forecast_path' => $this->ta->calculateForecastCorridor(
-                $currentPrice, 
-                $mlResult['forecast'] ?? ($lr['slope'] != 0 ? array_map(fn($i) => $currentPrice + ($lr['slope'] * $i), range(1, $forecastSteps)) : []),
-                $levels['atr'] ?? ($currentPrice * 0.01),
-                $isBuy ? 'BUY' : 'SELL'
-            ),
-            'summary' => "Engine V4.2 (Multi-Step): {$overallSignal}. RR: " . round($riskReward, 2) . ". Consistency: {$persistence} bars. Market is {$marketRegime}. R2: " . round($mlResult['r_squared'] ?? 0, 2) . "."
-         ];
-     }
- }
+    }
+}

@@ -7,6 +7,10 @@ from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 import yfinance as yf
 from ml_core import run_prediction_pipeline
+import warnings
+
+# Suppress warnings to keep stdout clean
+warnings.filterwarnings('ignore')
 
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
@@ -63,8 +67,12 @@ async def get_stock_data(symbol: str, x_ml_key: str = Header(None)):
         raise HTTPException(status_code=403, detail="Invalid API Key")
     
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+        def fetch_yf_data():
+            ticker = yf.Ticker(symbol)
+            return ticker.info
+            
+        import asyncio
+        info = await asyncio.to_thread(fetch_yf_data)
         
         return {
             "symbol": symbol,

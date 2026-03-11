@@ -1118,7 +1118,10 @@ function fetchNews() {
 // ─── BINANCE WEBSOCKET FOR REALTIME CHART ─────────────────────
 let binanceWS = null;
 function initBinanceWS() {
-    if (binanceWS) binanceWS.close();
+    if (binanceWS) {
+        binanceWS.onclose = null; // Prevent exponential reconnect loop
+        binanceWS.close();
+    }
     
     if (ASSET_TYPE !== 'crypto') return; // Only crypto has a public WS stream from Binance here
     let wsInterval = currentInterval.toLowerCase();
