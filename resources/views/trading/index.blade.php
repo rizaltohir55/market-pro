@@ -167,8 +167,8 @@
                         
                         {{-- Circular progress meter --}}
                         <div class="prediction-signal animate-breathe" id="pred-signal" style="display:flex; flex-direction:column; align-items:center; position:relative; margin-bottom: var(--space-4); transition:all var(--transition-base)">
-                            <div style="position:relative; width: 140px; height: 140px; margin-bottom: 12px; filter: drop-shadow(0 0 15px rgba(0,0,0,0.5))">
-                                <svg viewBox="0 0 100 100" style="position:absolute; top:0; left:0; width:100%; height:100%; transform: rotate(-90deg);">
+                            <div style="position:relative; width: 140px; height: 140px; margin-bottom: 12px; filter: drop-shadow(0 0 15px rgba(0,0,0,0.5)); overflow: visible;">
+                                <svg viewBox="0 0 100 100" style="position:absolute; top:0; left:0; width:100%; height:100%; transform: rotate(-90deg); overflow: visible;">
                                     <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="6" />
                                     <circle id="hud-ring" cx="50" cy="50" r="42" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264" style="transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s;" />
                                     <!-- Inner spinning target ring -->
@@ -324,6 +324,14 @@
 .orderbook-row:hover {
     background: rgba(255,255,255,0.05);
     transform: translateX(2px);
+}
+@keyframes pulse-bloom-green {
+    0%, 100% { text-shadow: 0 0 10px rgba(0, 255, 136, 0.6), 0 0 20px rgba(0, 255, 136, 0.3); transform: scale(1); }
+    50% { text-shadow: 0 0 20px rgba(0, 255, 136, 0.8), 0 0 40px rgba(0, 255, 136, 0.4); transform: scale(1.02); }
+}
+@keyframes pulse-bloom-red {
+    0%, 100% { text-shadow: 0 0 10px rgba(255, 51, 102, 0.6), 0 0 20px rgba(255, 51, 102, 0.3); transform: scale(1); }
+    50% { text-shadow: 0 0 20px rgba(255, 51, 102, 0.8), 0 0 40px rgba(255, 51, 102, 0.4); transform: scale(1.02); }
 }
 </style>
 @endsection
@@ -724,17 +732,64 @@ function renderPrediction(data) {
     if (hudRing) {
         hudRing.style.strokeDashoffset = offset;
         hudRing.style.stroke = sigClass === 'buy' ? 'var(--success)' : (sigClass === 'sell' ? 'var(--danger)' : 'var(--text-muted)');
-        hudRing.style.filter = `drop-shadow(0 0 10px ${sigClass === 'buy' ? 'rgba(16,185,129,0.8)' : (sigClass === 'sell' ? 'rgba(239,68,68,0.8)' : 'rgba(255,255,255,0.2)')})`;
+        
+        // Multi-layered bloom effect for the ring
+        if (sigClass === 'buy') {
+            hudRing.style.filter = `
+                drop-shadow(0 0 4px var(--success)) 
+                drop-shadow(0 0 12px rgba(0, 255, 136, 0.4)) 
+                drop-shadow(0 0 20px rgba(0, 255, 136, 0.2))
+            `;
+        } else if (sigClass === 'sell') {
+            hudRing.style.filter = `
+                drop-shadow(0 0 4px var(--danger)) 
+                drop-shadow(0 0 12px rgba(239, 68, 68, 0.4)) 
+                drop-shadow(0 0 20px rgba(239, 68, 68, 0.2))
+            `;
+        } else {
+            hudRing.style.filter = 'drop-shadow(0 0 8px rgba(255, 255, 255, 0.1))';
+        }
     }
     
     if (hudAction) {
         hudAction.textContent = data.signal;
         hudAction.className = `signal-action ${sigClass === 'buy' ? 'text-success' : (sigClass === 'sell' ? 'text-danger' : 'text-primary')}`;
-        hudAction.style.textShadow = `0 0 15px ${sigClass === 'buy' ? 'rgba(16,185,129,0.6)' : (sigClass === 'sell' ? 'rgba(239,68,68,0.6)' : 'rgba(255,255,255,0.2)')}`;
+        
+        // Premium text glow
+        if (sigClass === 'buy') {
+            hudAction.style.textShadow = `
+                0 0 10px rgba(0, 255, 136, 0.6),
+                0 0 20px rgba(0, 255, 136, 0.3),
+                0 0 30px rgba(0, 255, 136, 0.1)
+            `;
+            // Add pulse for STRONG signals
+            if (data.signal.includes('STRONG')) {
+                hudAction.style.animation = 'pulse-bloom-green 2s infinite ease-in-out';
+            } else {
+                hudAction.style.animation = 'none';
+            }
+        } else if (sigClass === 'sell') {
+            hudAction.style.textShadow = `
+                0 0 10px rgba(255, 51, 102, 0.6),
+                0 0 20px rgba(255, 51, 102, 0.3),
+                0 0 30px rgba(255, 51, 102, 0.1)
+            `;
+            if (data.signal.includes('STRONG')) {
+                hudAction.style.animation = 'pulse-bloom-red 2s infinite ease-in-out';
+            } else {
+                hudAction.style.animation = 'none';
+            }
+        } else {
+            hudAction.style.textShadow = '0 0 10px rgba(255, 255, 255, 0.2)';
+            hudAction.style.animation = 'none';
+        }
     }
     
     if (hudConf) {
         hudConf.textContent = `${conf}% CONF`;
+        if (sigClass === 'buy') hudConf.style.color = 'var(--success)';
+        else if (sigClass === 'sell') hudConf.style.color = 'var(--danger)';
+        else hudConf.style.color = 'var(--text-muted)';
     }
         
     // 2. Targets & Regime
