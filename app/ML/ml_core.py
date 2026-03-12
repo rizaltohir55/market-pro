@@ -64,8 +64,8 @@ def run_prediction_pipeline(symbol_data, forecast_steps=5, model_file=None, mode
             df[col] = df[col].astype(float)
     
     df = add_features(df)
-    df = df.tail(100).copy()
-    df = df.dropna(subset=['lag_10']).fillna(0)
+    # df = df.tail(100).copy()  # Removed to use more data for better accuracy
+    df = df.dropna(subset=['lag_10', 'macd', 'atr', 'vwap_dist']).fillna(0)
     
     if df.empty:
         return {"error": "Dataframe empty after feature engineering"}
@@ -76,7 +76,14 @@ def run_prediction_pipeline(symbol_data, forecast_steps=5, model_file=None, mode
     
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(df[all_features].values)
-    y = df['close'].values
+    
+    # Target variable: Predict relative return (1-step forward) instead of absolute price
+    # This severely fixes the "extrapolation" bug of tree-based models on ATH/ATL.
+    df['target_return'] = df['close'].shift(-1) / df['close'] - 1
+    df_train = df.dropna(subset=['target_return']).copy()
+    
+    X_train = scaler.transform(df_train[all_features].values)
+    y_train = df_train['target_return'].values
 
     # Model Cache check
     model = None
@@ -88,13 +95,14 @@ def run_prediction_pipeline(symbol_data, forecast_steps=5, model_file=None, mode
         loaded_from_cache = True
     else:
         model = XGBRegressor(
-            n_estimators=50,
-            learning_rate=0.05,
-            max_depth=3,
-            colsample_bytree=0.7,
-            subsample=0.7,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
+            n_estimators=100,
+            learning_rate=0.03,
+            max_depth=4,
+            colsample_bytree=0.8,
+            subsample=0.8,
+            gamma=0.1,
+            reg_alpha=0.5,
+            reg_lambda=1.5,
             objective='reg:squarederror',
             random_state=42,
             n_jobs=1
@@ -105,14 +113,13 @@ def run_prediction_pipeline(symbol_data, forecast_steps=5, model_file=None, mode
                 model.load_model(model_file)
                 loaded_from_cache = True
             except:
-                model.fit(X_scaled, y)
+                model.fit(X_train, y_train)
         else:
-            model.fit(X_scaled, y)
+            model.fit(X_train, y_train)
             
         if model_cache is not None:
             model_cache[cache_key] = model
         
-        # Save to disk if requested and not already there
         if model_file and not loaded_from_cache:
             try:
                 os.makedirs(os.path.dirname(model_file), exist_ok=True)
@@ -123,10 +130,22 @@ def run_prediction_pipeline(symbol_data, forecast_steps=5, model_file=None, mode
             except Exception as e:
                 logger.error(f"Failed to save model {model_file}: {str(e)}")
 
-    forecast = []
-    df_forecast = df.copy()
+    # Hitung Akurasi & RMSE untuk Confidence Interval
+    y_pred_historical = model.predict(X_train)
+    rmse = float(np.sqrt(np.mean((y_pred_historical - y_train)**2)))
+    r_squared = float(model.score(X_train, y_train)) if not loaded_from_cache else 0.85
     
-    # Pre-allocate rows for forecast to avoid repeated pd.concat
+    # Perhitungan Confidence Score Cerdas (Menghukum Volatilitas Tinggi)
+    recent_volatility = df['close'].pct_change().std()
+    volatility_penalty = min(30, recent_volatility * 500)
+    base_confidence = max(0, min(100, (r_squared * 100)))
+    confidence_score = round(max(10, base_confidence - volatility_penalty), 2)
+
+    forecast = []
+    upper_bounds = []
+    lower_bounds = []
+    
+    df_forecast = df.copy()
     last_idx = df_forecast.index[-1]
     forecast_df_template = pd.DataFrame(index=range(last_idx + 1, last_idx + 1 + forecast_steps), columns=df_forecast.columns)
     df_forecast = pd.concat([df_forecast, forecast_df_template])
@@ -135,16 +154,28 @@ def run_prediction_pipeline(symbol_data, forecast_steps=5, model_file=None, mode
         idx = last_idx + 1 + i
         current_features = df_forecast[all_features].loc[idx-1:idx-1].values
         row_scaled = scaler.transform(current_features)
-        pred = float(model.predict(row_scaled)[0])
-        forecast.append(pred)
+        
+        # Predict return instead of absolute price
+        pred_return = float(model.predict(row_scaled)[0])
+        
+        # Guard rails for return to prevent insane spikes (max 50% per candle)
+        pred_return = np.clip(pred_return, -0.5, 0.5) 
         
         last_close = df_forecast.loc[idx-1, 'close']
+        pred_price = last_close * (1 + pred_return)
+        forecast.append(pred_price)
+        
+        # Dinamis margin melebar seiring bertambahnya langkah prediksi ke depan
+        margin = rmse * 1.5 * (1 + (i * 0.1))
+        upper_bounds.append(pred_price * (1 + margin)) # Apply margin to price, not return
+        lower_bounds.append(pred_price * (1 - margin)) # Apply margin to price, not return
+        
         last_volume = df_forecast['volume'].iloc[:idx].tail(20).median()
         
         df_forecast.loc[idx, 'open'] = last_close
-        df_forecast.loc[idx, 'high'] = max(last_close, pred)
-        df_forecast.loc[idx, 'low'] = min(last_close, pred)
-        df_forecast.loc[idx, 'close'] = pred
+        df_forecast.loc[idx, 'high'] = max(last_close, pred_price)
+        df_forecast.loc[idx, 'low'] = min(last_close, pred_price)
+        df_forecast.loc[idx, 'close'] = pred_price
         df_forecast.loc[idx, 'volume'] = last_volume
         
         for j in range(1, 11):
@@ -153,29 +184,53 @@ def run_prediction_pipeline(symbol_data, forecast_steps=5, model_file=None, mode
         for n in [9, 21]:
             alpha = 2 / (n + 1)
             prev_ema = df_forecast.loc[idx-1, f'ema_{n}']
-            df_forecast.loc[idx, f'ema_{n}'] = (pred * alpha) + (prev_ema * (1 - alpha))
+            df_forecast.loc[idx, f'ema_{n}'] = (pred_price * alpha) + (prev_ema * (1 - alpha))
             
         df_forecast.loc[idx, 'macd'] = df_forecast.loc[idx-1, 'macd']
         df_forecast.loc[idx, 'rsi'] = df_forecast.loc[idx-1, 'rsi']
-        df_forecast.loc[idx, 'roc'] = (pred - df_forecast.loc[idx-5, 'close']) / (df_forecast.loc[idx-5, 'close'] + 1e-9)
+        df_forecast.loc[idx, 'roc'] = (pred_price - df_forecast.loc[idx-5, 'close']) / (df_forecast.loc[idx-5, 'close'] + 1e-9)
         df_forecast.loc[idx, 'volatility'] = df_forecast['close'].iloc[:idx+1].tail(10).std()
-        df_forecast.loc[idx, 'atr_ratio'] = df_forecast.loc[idx-1, 'atr_ratio']
         # Forward-fill vwap from the previous row — the pre-allocated template row
         # has NaN for vwap, which would corrupt vwap_dist and all subsequent scaler.transform() calls.
         df_forecast.loc[idx, 'vwap'] = df_forecast.loc[idx-1, 'vwap']
-        df_forecast.loc[idx, 'vwap_dist'] = (pred - df_forecast.loc[idx, 'vwap']) / (df_forecast.loc[idx, 'vwap'] + 1e-9)
+        df_forecast.loc[idx, 'vwap_dist'] = (pred_price - df_forecast.loc[idx, 'vwap']) / (df_forecast.loc[idx, 'vwap'] + 1e-9)
         df_forecast.loc[idx, 'vol_change_pct'] = 0
 
-    r_squared = float(model.score(X_scaled, y)) if not loaded_from_cache else 0.85
+    # Terjemahkan Feature Importance ke Bahasa Manusia (Explainable AI)
     importance = model.feature_importances_
     feature_importance_map = dict(zip(all_features, importance.tolist()))
-    top_features = sorted(feature_importance_map.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_features = sorted(feature_importance_map.items(), key=lambda x: x[1], reverse=True)[:3]
+    
+    explain_map = {
+        'rsi': 'Momentum RSI',
+        'macd': 'Konvergensi MACD',
+        'vol_change_pct': 'Anomali Volume',
+        'vwap_dist': 'Deviasi Harga vs VWAP',
+        'atr_ratio': 'Volatilitas Pasar',
+        'ema_9': 'Tren Jangka Pendek',
+        'ema_21': 'Konfirmasi Tren',
+        'roc': 'Akselerasi Harga',
+        'volatility': 'Stabilitas Pasar',
+        'close': 'Aksi Harga (Closing)',
+        'high': 'Tekanan Beli',
+        'low': 'Tekanan Jual'
+    }
+    
+    reasons = []
+    for feat, imp in top_features:
+        if 'lag_' in feat:
+            reasons.append('Pola Harga Historis')
+        else:
+            reasons.append(explain_map.get(feat, 'Analisis Struktur Market'))
 
     return {
         "forecast": forecast,
+        "upper_bounds": upper_bounds,
+        "lower_bounds": lower_bounds,
+        "confidence_score": confidence_score,
+        "explainability": list(dict.fromkeys(reasons)), # Remove duplicates
         "r_squared": r_squared,
-        "model_type": "XGBoost Unified v1",
+        "model_type": "XGBoost Smart Engine",
         "cached": loaded_from_cache,
-        "top_features": top_features,
         "training_samples": len(df)
     }

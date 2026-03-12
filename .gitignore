@@ -26,3 +26,18 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Temp Test Files
+debug_fred.php
+test_commodities.php
+test_fred.php
+test_fred_forced.php
+test_output.txt
+debug_fred.php
+api_debug2.php
+stock_yahoo_test.php
+okx_debug.php

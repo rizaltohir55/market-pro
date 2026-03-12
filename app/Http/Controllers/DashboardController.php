@@ -10,6 +10,7 @@ use App\Services\PredictionService;
 use App\Services\TechnicalAnalysisService;
 use App\Services\BondMarketService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
@@ -61,18 +62,28 @@ class DashboardController extends Controller
 
     public function getGlobalRates(ForexMarketService $forexMarket, CommodityMarketService $commodityMarket)
     {
-        return response()->json([
-            'forex' => $forexMarket->getForexRates(),
-            'commodities' => $commodityMarket->getCommodityPrices(),
-        ]);
+        try {
+            return response()->json([
+                'forex' => $forexMarket->getForexRates(),
+                'commodities' => $commodityMarket->getCommodityPrices(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error("DashboardController@getGlobalRates error: " . $e->getMessage());
+            return response()->json(['forex' => [], 'commodities' => []]);
+        }
     }
 
     public function getGlobalOverview(BondMarketService $bondMarket, CommodityMarketService $commodityMarket)
     {
-        return response()->json([
-            'bonds' => $bondMarket->getTreasuryYields(),
-            'commodities' => $commodityMarket->getCommodityPrices(),
-        ]);
+        try {
+            return response()->json([
+                'bonds' => $bondMarket->getTreasuryYields(),
+                'commodities' => $commodityMarket->getCommodityPrices(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error("DashboardController@getGlobalOverview error: " . $e->getMessage());
+            return response()->json(['bonds' => [], 'commodities' => []]);
+        }
     }
 
     public function trading(Request $request, MultiSourceMarketService $market, StockMarketService $stockMarket, ForexMarketService $forexMarket)
