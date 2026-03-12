@@ -36,10 +36,8 @@
 </div>
 
 <div class="dashboard-layout-grid" style="display: grid; grid-template-columns: 1fr 340px; gap: var(--space-4); margin-top: var(--space-4); align-items: start;">
-    {{-- Left Column: Main Dashboard Content --}}
     <div class="dashboard-main-col" style="display: flex; flex-direction: column; gap: var(--space-4);">
         
-        {{-- Global Market Pulse (Bond Yields & Commodities) --}}
         <div class="panel acrylic fade-in-up" style="--delay: 0.15s;">
             <div class="panel-header">
                 <span class="panel-title">
@@ -49,7 +47,6 @@
             </div>
             <div class="panel-body" style="padding: 15px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                    {{-- US Treasury Yields --}}
                     <div>
                         <div class="text-caption" style="margin-bottom: 12px; display: flex; align-items: center; gap: 6px; color: var(--text-muted);">
                             <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -62,7 +59,6 @@
                         </div>
                     </div>
                     
-                    {{-- Global Commodities --}}
                     <div>
                         <div class="text-caption" style="margin-bottom: 12px; display: flex; align-items: center; gap: 6px; color: var(--text-muted);">
                             <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
@@ -78,9 +74,7 @@
             </div>
         </div>
 
-        {{-- Main Grid: Top Movers + Active --}}
         <div class="grid-3 fade-in-up" style="--delay: 0.2s; align-items:start; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-4);">
-            {{-- Top Gainers (Stocks) --}}
             <div class="panel acrylic">
                 <div class="panel-header" style="border-bottom:none; padding-bottom:0">
                     <span class="panel-title" style="text-shadow: 0 0 10px rgba(0, 255, 136, 0.3)">
@@ -97,7 +91,6 @@
                 </div>
             </div>
 
-            {{-- Top Losers (Stocks) --}}
             <div class="panel acrylic">
                 <div class="panel-header" style="border-bottom:none; padding-bottom:0">
                     <span class="panel-title" style="text-shadow: 0 0 10px rgba(255, 51, 102, 0.3)">
@@ -114,7 +107,6 @@
                 </div>
             </div>
 
-            {{-- Most Active (Stocks) --}}
             <div class="panel acrylic">
                 <div class="panel-header" style="border-bottom:none; padding-bottom:0">
                     <span class="panel-title" style="text-shadow: 0 0 10px rgba(0, 170, 255, 0.3)">
@@ -132,12 +124,11 @@
             </div>
         </div>
 
-        {{-- Market Overview Table --}}
         <div class="panel acrylic fade-in-up" style="--delay: 0.3s;">
             <div class="panel-header">
                 <span class="panel-title">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                    Market Overview — Top Volume USDT Pairs
+                    Market Overview & AI Smart Signals
                 </span>
                 <div class="panel-actions">
                     <button aria-label="Refresh Market Overview" class="btn btn-ghost btn-sm btn-sweep" onclick="location.reload()">
@@ -151,19 +142,18 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Pair</th>
-                            <th class="align-right">Price</th>
-                            <th class="align-right">24h Change</th>
-                            <th class="align-right">24h High</th>
-                            <th class="align-right">24h Low</th>
-                            <th class="align-right">Volume (USDT)</th>
-                            <th class="align-right">Trades</th>
+                            <th>Aset</th>
+                            <th class="align-right">Harga</th>
+                            <th class="align-right">Perubahan 24j</th>
+                            <th class="align-center" style="color:var(--accent);">🤖 Sinyal AI</th>
+                            <th class="align-center">🎯 Area Target</th>
+                            <th class="align-right">Volume</th>
                         </tr>
                     </thead>
                     <tbody>
                         @for($i=0; $i<10; $i++)
                         <tr>
-                            <td colspan="8"><div class="skeleton" style="height: 30px; background: rgba(255,255,255,0.02); width: 100%;"></div></td>
+                            <td colspan="7"><div class="skeleton" style="height: 30px; background: rgba(255,255,255,0.02); width: 100%;"></div></td>
                         </tr>
                         @endfor
                     </tbody>
@@ -172,7 +162,6 @@
         </div>
     </div>
     
-    {{-- Right Column: Live TV Panel --}}
     <div class="dashboard-sidebar-col" style="display: flex; flex-direction: column; gap: var(--space-4);">
         <div class="panel acrylic fade-in-up" style="--delay: 0.2s;">
             <div class="panel-header">
@@ -199,7 +188,6 @@
             </div>
         </div>
 
-        {{-- Upcoming Events (Economic Calendar) --}}
         <div class="panel acrylic fade-in-up" style="--delay: 0.3s; flex-shrink: 0;">
             <div class="panel-header">
                 <span class="panel-title" style="display: flex; align-items: center; gap: 8px;">
@@ -227,7 +215,7 @@
         var iframe = document.getElementById('live-tv-iframe');
         iframe.src = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&mute=1";
     }
-    // Fetch Global Overview (Bonds & Commodities)
+    
     fetch('/api/market/dashboard/global-overview')
         .then(response => response.json())
         .then(data => {
@@ -238,16 +226,18 @@
         const bondList = document.getElementById('bond-yields-list');
         const commList = document.getElementById('commodities-list');
 
-        if (data.bonds && data.bonds.yields) {
+        if (data.bonds && data.bonds.yields && data.bonds.yields.length > 0) {
             bondList.innerHTML = data.bonds.yields.map(b => `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding: 6px 10px; background: rgba(255,255,255,0.02); border-radius: 4px; font-family: var(--font-mono); font-size: 0.8rem;">
                     <span style="color: var(--text-secondary)">${b.type}</span>
                     <span style="color: var(--info); font-weight: 700;">${b.rate.toFixed(3)}%</span>
                 </div>
             `).join('');
+        } else {
+            bondList.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-muted); font-size: 0.75rem;">Yield data unavailable</div>';
         }
 
-        if (data.commodities) {
+        if (data.commodities && data.commodities.length > 0) {
             commList.innerHTML = data.commodities.slice(0, 4).map(c => {
                 const change = parseFloat(c.change_pct);
                 const color = change >= 0 ? 'var(--success)' : 'var(--danger)';
@@ -258,10 +248,11 @@
                     </div>
                 `;
             }).join('');
+        } else {
+            commList.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-muted); font-size: 0.75rem;">Commodity data unavailable</div>';
         }
     }
 
-    // Fetch Economic Calendar
     fetch('/api/market/economic-calendar')
         .then(response => response.json())
         .then(data => {
@@ -271,15 +262,11 @@
     function renderEconomicCalendar(events) {
         const list = document.getElementById('economic-calendar-list');
         if (!events || events.length === 0) {
-            list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.8rem;">No events scheduled</div>';
+            list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.8rem;">Tidak ada jadwal event</div>';
             return;
         }
 
-        const now = Math.floor(Date.now() / 1000);
-        // Show high/medium impact events from the current weekly feed
-        // If data is slightly old (ForexFactory weekly XML), we show all filtered by importance
-        const filtered = events.filter(e => e.importance !== 'low')
-                               .slice(0, 8);
+        const filtered = events.filter(e => e.importance !== 'low').slice(0, 8);
 
         list.innerHTML = filtered.map(e => {
             const importanceColor = e.importance === 'high' ? 'var(--danger)' : (e.importance === 'medium' ? 'var(--warning)' : 'var(--info)');
@@ -317,13 +304,14 @@
         100% { opacity: 1; }
     }
     
-    /* Responsive adjustment for the dashboard grid */
     @media (max-width: 1200px) {
         .dashboard-layout-grid {
             grid-template-columns: 1fr !important;
         }
     }
+
+    .badge-buy { background: rgba(0, 255, 136, 0.15); color: var(--success); border: 1px solid rgba(0, 255, 136, 0.3); padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; display: inline-block; }
+    .badge-sell { background: rgba(255, 51, 102, 0.15); color: var(--danger); border: 1px solid rgba(255, 51, 102, 0.3); padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; display: inline-block; }
+    .badge-neutral { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border: 1px solid rgba(255, 255, 255, 0.1); padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; display: inline-block; }
 </style>
 @endsection
-
-

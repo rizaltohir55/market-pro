@@ -35,7 +35,7 @@ class BondMarketService extends BaseMarketService
                 foreach ($series as $seriesId => $meta) {
                     $pool->as($seriesId)
                         ->withOptions($this->getHttpOptions(10))
-                        ->withHeaders($this->browserHeaders())
+                        ->withHeaders(array_merge($this->browserHeaders(), ['Accept' => '*/*']))
                         ->retry(2, 500)
                         ->get($this->fredBase, ['id' => $seriesId]);
                 }
@@ -49,7 +49,7 @@ class BondMarketService extends BaseMarketService
                     // Fallback to sequential if pool failed for this series
                     if (!($r instanceof \Illuminate\Http\Client\Response) || !$r->successful()) {
                         $r = Http::withOptions($this->getHttpOptions(10))
-                            ->withHeaders($this->browserHeaders())
+                            ->withHeaders(array_merge($this->browserHeaders(), ['Accept' => '*/*']))
                             ->retry(2, 500)
                             ->get($this->fredBase, ['id' => $seriesId]);
                     }
@@ -85,14 +85,62 @@ class BondMarketService extends BaseMarketService
             }
 
             if (!empty($yields)) {
-                Log::info('GlobalMarketService: US Treasury yields OK from FRED — ' . count($yields) . ' maturities.');
+                Log::info('BondMarketService: US Treasury yields OK from FRED — ' . count($yields) . ' maturities.');
                 return [
                     'source' => 'fred_stlouisfed',
                     'yields' => $yields,
                 ];
             }
+
+            // Fallback to Yahoo Finance indices if FRED failed
+            Log::warning('BondMarketService: FRED fell back, trying Yahoo Finance indices.');
+            $yahooYields = $this->getTreasuryYieldsFromYahoo();
+            if (!empty($yahooYields)) {
+                return [
+                    'source' => 'yahoo_finance',
+                    'yields' => $yahooYields,
+                ];
+            }
+
             Log::warning('GlobalMarketService: Treasury yields all failed.');
             return [];
         }) ?? [];
+    }
+
+    /**
+     * Fallback: Get Treasury Yield proxies from Yahoo Finance.
+     * ^IRX = 13-Week, ^FVX = 5-Year, ^TNX = 10-Year, ^TYX = 30-Year.
+     */
+    private function getTreasuryYieldsFromYahoo(): array
+    {
+        $map = [
+            '^IRX' => ['type' => 'T-Bill',   'label' => '3-Month Treasury Bill'],
+            '^FVX' => ['type' => 'T-Note 5Y', 'label' => '5-Year Treasury Note'],
+            '^TNX' => ['type' => 'T-Note 10Y', 'label' => '10-Year Treasury Note'],
+            '^TYX' => ['type' => 'T-Bond',    'label' => '30-Year Treasury Bond'],
+        ];
+
+        try {
+            $r = $this->yahooGet('/v7/finance/quote', ['symbols' => implode(',', array_keys($map))]);
+            if ($r && $r->successful()) {
+                $d = $r->json();
+                $results = $d['quoteResponse']['result'] ?? [];
+                $yields = [];
+                foreach ($results as $q) {
+                    $sym = $q['symbol'];
+                    $yields[] = [
+                        'type'   => $map[$sym]['type'],
+                        'label'  => $map[$sym]['label'],
+                        'rate'   => (float) ($q['regularMarketPrice'] ?? 0),
+                        'date'   => date('Y-m-d'),
+                        'source' => 'yahoo_finance',
+                    ];
+                }
+                return $yields;
+            }
+        } catch (\Exception $e) {
+            Log::warning("BondMarketService: Yahoo fallback exception — " . $e->getMessage());
+        }
+        return [];
     }
 }

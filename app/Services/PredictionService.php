@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+
 class PredictionService
 {
     private TechnicalAnalysisService $ta;
@@ -17,11 +20,9 @@ class PredictionService
 
     public function getCacheKey(string $symbol, string $interval, int $fearGreed, float $lsRatio, bool $isTrending, int $forecastSteps): string
     {
-        // Enforce consistent formatting for the cache key to avoid mismatch between batch and single executions
-        $lsStr = number_format($lsRatio, 1, '.', ''); // forces 1.0
+        $lsStr = number_format($lsRatio, 1, '.', '');
         $contextHash = md5($interval . '_' . $fearGreed . '_' . $lsStr . '_' . ($isTrending ? 'T' : 'R') . '_' . $forecastSteps);
-        $cacheKey = "prediction_v4_" . strtoupper($symbol) . "_" . $contextHash;
-        return $cacheKey;
+        return "prediction_v4_" . strtoupper($symbol) . "_" . $contextHash;
     }
 
     public function getScalpingSignal(array $klines, string $symbol = 'UNKNOWN', string $interval = '15m', array $htfKlines = [], int $fearGreed = 50, float $lsRatio = 1.0, bool $isTrending = false, int $forecastSteps = 5): array
@@ -29,33 +30,28 @@ class PredictionService
         $symbol = strtoupper($symbol);
         $cacheKey = $this->getCacheKey($symbol, $interval, $fearGreed, $lsRatio, $isTrending, $forecastSteps);
         
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function() use ($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending, $forecastSteps) {
+        return Cache::remember($cacheKey, 300, function() use ($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending, $forecastSteps) {
             return $this->calculateSignal($klines, $symbol, $interval, $htfKlines, $fearGreed, $lsRatio, $isTrending, null, $forecastSteps);
         });
     }
 
-    /**
-     * Get batch scalping signals with optimized ML execution.
-     */
     public function getBatchSignals(array $symbolData, string $interval = '15m', int $forecastSteps = 5): array
     {
         $batchResults = [];
         $mlBatchInput = [];
         
-        // 1. Prepare data and check cache
         foreach ($symbolData as $symbol => $data) {
             $symbol = strtoupper($symbol);
-            // Since batch signals often use default macro values (50, 1.0, false), we use a stable hash
             $cacheKey = $this->getCacheKey($symbol, $interval, 50, 1.0, false, $forecastSteps);
             
-            $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
+            $cached = Cache::get($cacheKey);
             if ($cached) {
                 $batchResults[$symbol] = $cached;
                 continue;
             }
 
             if (!isset($data['klines']) || count($data['klines']) < 50) {
-                $batchResults[$symbol] = ['signal' => 'NEUTRAL', 'summary' => 'Insufficient data'];
+                $batchResults[$symbol] = $this->getDefaultResponse('Insufficient data for batch analysis');
                 continue;
             }
 
@@ -66,54 +62,56 @@ class PredictionService
             return $batchResults;
         }
 
-        // 2. Perform Batch ML prediction (The bottleneck)
         $mlResults = $this->ml->predictBatchXGBoost($mlBatchInput, $forecastSteps);
 
-        // 3. Finalize each signal with TA confluence
         foreach ($mlBatchInput as $symbol => $klines) {
             $htfKlines = $symbolData[$symbol]['htfKlines'] ?? [];
-            $mlResult = $mlResults[$symbol] ?? ['error' => 'ML result missing'];
+            $mlResult = $mlResults[$symbol] ?? ['error' => 'ML result missing or failed'];
             
             $signal = $this->calculateSignal($klines, $symbol, $interval, $htfKlines, 50, 1.0, false, $mlResult, $forecastSteps);
             
             $cacheKey = $this->getCacheKey($symbol, $interval, 50, 1.0, false, $forecastSteps);
-            \Illuminate\Support\Facades\Cache::put($cacheKey, $signal, 300);
+            Cache::put($cacheKey, $signal, 300);
             $batchResults[$symbol] = $signal;
         }
 
         return $batchResults;
     }
 
-    private function calculateSignal(array $klines, string $symbol, string $interval, array $htfKlines, int $fearGreed, float $lsRatio, bool $isTrending, ?array $precomputedML = null, int $forecastSteps = 5): array
+    private function getDefaultResponse(string $reason = 'Insufficient data'): array
     {
-        $defaultResponse = [
+        return [
             'signal' => 'NEUTRAL',
             'confidence' => 0,
             'indicators' => [],
-            'summary' => 'Insufficient data',
+            'summary' => $reason,
             'categories' => [],
-            'price_target_buy' => 0,
-            'price_target_sell' => 0,
-            'stop_loss_buy' => 0,
-            'stop_loss_sell' => 0,
+            'price' => 0,
+            'tp' => 0,
+            'sl' => 0,
+            'target' => 0,
+            'stop_loss' => 0,
+            'trailing_stop' => 0,
             'risk_reward' => 0,
             'trend_strength' => 'UNKNOWN',
-            'market_regime' => 'UNKNOWN'
+            'market_regime' => 'UNKNOWN',
+            'ml_forecast' => ['linear_regression' => [], 'monte_carlo' => []]
         ];
+    }
 
+    private function calculateSignal(array $klines, string $symbol, string $interval, array $htfKlines, int $fearGreed, float $lsRatio, bool $isTrending, ?array $precomputedML = null, int $forecastSteps = 5): array
+    {
         if (count($klines) < 50) { 
-            \Illuminate\Support\Facades\Log::warning("PredictionService: Insufficient klines for {$symbol}/{$interval} (count: " . count($klines) . ")");
-            return $defaultResponse;
+            Log::warning("PredictionService: Insufficient klines for {$symbol}/{$interval} (count: " . count($klines) . ")");
+            return $this->getDefaultResponse();
         }
 
         $closes = array_column($klines, 'close');
         $currentPrice = end($closes);
 
-        // 0. Kalman Filter Denoising
         $kalmanPrices = $this->ta->calculateKalmanFilter($closes);
-        $denoisedPrice = end($kalmanPrices);
+        $denoisedPrice = end($kalmanPrices) ?: $currentPrice;
 
-        // 1. Calculate Market Regime (SuperTrend + ADX)
         $superTrend = $this->ta->calculateSuperTrend($klines);
         $currSt = !empty($superTrend) ? end($superTrend) : ['trend' => 0, 'value' => 0];
 
@@ -126,7 +124,6 @@ class PredictionService
         $categories = $this->initializeCategories($lastAdx, $currSt);
         $indicatorsList = [];
 
-        // Evaluate sub-components
         $this->evaluateTrendIndicators($categories, $indicatorsList, $klines, $closes, $currentPrice, $adxData, $lastAdx);
         $this->evaluateMomentumIndicators($categories, $indicatorsList, $klines, $closes, $isStrongTrend);
         $this->evaluatePriceActionIndicators($categories, $indicatorsList, $klines);
@@ -137,7 +134,6 @@ class PredictionService
         $fibPivots = $this->ta->calculateFibonacciPivots($klines);
         $this->evaluateStructureIndicators($categories, $indicatorsList, $currentPrice, $bb, $fibPivots);
 
-        // Advanced mechanics
         $fractalPenalty = 1.0;
         $hurst = 0.5;
         $this->evaluateAdvancedIndicators($categories, $indicatorsList, $closes, $currentPrice, $denoisedPrice, $currSt, $fractalPenalty, $hurst);
@@ -146,47 +142,68 @@ class PredictionService
         $lr = ['slope' => 0, 'intercept' => 0, 'r_squared' => 0]; 
         $mc = ['median' => $currentPrice];
         $mlResult = $precomputedML ?? $this->ml->predictXGBoost($klines, $forecastSteps);
+        
+        $machineLearningConfidence = $mlResult['confidence_score'] ?? 50;
+        $mlUpperBounds = $mlResult['upper_bounds'] ?? [];
+        $mlLowerBounds = $mlResult['lower_bounds'] ?? [];
+        $mlExplainability = $mlResult['explainability'] ?? [];
+        
         $this->evaluateMachineLearning($categories, $indicatorsList, $closes, $currentPrice, $forecastSteps, $mlResult, $lr, $mc);
 
-        // Compute Multi-Layer Scores
-        $totalBuy = 0; $totalSell = 0;
+        $totalBuy = 0.0; $totalSell = 0.0;
         $categoryScores = [];
         $this->computeCategoryScores($categories, $totalBuy, $totalSell, $categoryScores);
 
-        // Squeeze Momentum
         $currSqueeze = $this->evaluateSqueezeMomentum($indicatorsList, $klines, $totalBuy, $totalSell);
 
-        // Determine Base Signal
         $confidence = max($totalBuy, $totalSell) * $fractalPenalty;
         $overallSignal = $this->determineBaseSignal($totalBuy, $totalSell);
 
-        // Apply Hard Filters (Volatility, Trend Alignment, ML Divergence)
         $volatilityFilter = $this->applyVolatilityFilter($indicatorsList, $klines, $confidence, $overallSignal);
-        $this->applyContextualConflunceCheck($overallSignal, $confidence, $volatilityFilter, $currSt, $lr, $currSqueeze, $denoisedPrice, $currentPrice, $totalBuy, $totalSell);
+        $this->applyContextualConfluenceCheck($overallSignal, $confidence, $volatilityFilter, $currSt, $lr, $currSqueeze, $denoisedPrice, $currentPrice, $totalBuy, $totalSell);
 
         $marketRegime = $this->determineMarketRegime($currSqueeze, $trendStrength, $bb, $currentPrice);
 
-        // Final Confluence Checks
         $htfAligned = $this->applyHTFConfluence($indicatorsList, $htfKlines, $overallSignal, $confidence);
         $persistence = $this->handleSignalPersistence($symbol, $interval, $overallSignal);
         $this->applyNewsImpactFilter($indicatorsList, $overallSignal, $confidence);
 
         $isBuy = str_contains($overallSignal, 'BUY');
         
-        // Target & Stop Loss Levels
         $k_scaling = max(1.0, $forecastSteps / 5);
-        $levels = $this->ta->calculateDynamicTPBL($klines, $isBuy ? 'BUY' : 'SELL', 1.5 * $k_scaling, 1.0 * $k_scaling);
+        $levels = $this->ta->calculateDynamicTPSL($klines, $isBuy ? 'BUY' : 'SELL', 1.5 * $k_scaling, 1.0 * $k_scaling);
         $trailingStop = $this->ta->calculateTrailingStopATR($klines, $isBuy ? 'BUY' : 'SELL', 2.0);
         
-        $tp = $levels['tp'];
-        $sl = $levels['sl'];
+        $tp = $levels['tp'] ?? $currentPrice * 1.02;
+        $sl = $levels['sl'] ?? $currentPrice * 0.98;
         
         $riskReward = $this->calculateRiskReward($currentPrice, $tp, $sl);
         $this->applyRiskRewardFilter($indicatorsList, $overallSignal, $confidence, $riskReward);
 
+        // Advanced forecast corridor based on ML bounds if available
+        $forecastPath = [];
+        if (!empty($mlUpperBounds) && !empty($mlLowerBounds) && !empty($mlResult['forecast'])) {
+            for ($i=0; $i < count($mlResult['forecast']); $i++) {
+                $forecastPath[] = [
+                    'price' => $mlResult['forecast'][$i],
+                    'upper' => $mlUpperBounds[$i],
+                    'lower' => $mlLowerBounds[$i]
+                ];
+            }
+        } else {
+            $forecastPath = $this->ta->calculateForecastCorridor(
+                $currentPrice, 
+                $mlResult['forecast'] ?? ($lr['slope'] != 0 ? array_map(fn($i) => $currentPrice + ($lr['slope'] * $i), range(1, $forecastSteps)) : []),
+                $levels['atr'] ?? ($currentPrice * 0.01),
+                $isBuy ? 'BUY' : 'SELL'
+            );
+        }
+
         return [
             'signal' => $overallSignal,
             'confidence' => round($confidence, 1),
+            'ml_confidence' => $machineLearningConfidence,
+            'ml_explainability' => $mlExplainability,
             'buy_score' => round($totalBuy, 1),
             'sell_score' => round($totalSell, 1),
             'indicators' => $indicatorsList,
@@ -194,8 +211,8 @@ class PredictionService
             'price' => $currentPrice,
             'tp' => $tp,
             'sl' => $sl,
-            'target' => $tp, // Alias for frontend
-            'stop_loss' => $sl, // Alias for frontend
+            'target' => $tp, 
+            'stop_loss' => $sl, 
             'trailing_stop' => round($trailingStop, 2),
             'persistence' => $persistence,
             'htf_aligned' => $htfAligned,
@@ -207,12 +224,7 @@ class PredictionService
                 'monte_carlo' => $mc
             ],
             'hurst' => $hurst,
-            'forecast_path' => $this->ta->calculateForecastCorridor(
-                $currentPrice, 
-                $mlResult['forecast'] ?? ($lr['slope'] != 0 ? array_map(fn($i) => $currentPrice + ($lr['slope'] * $i), range(1, $forecastSteps)) : []),
-                $levels['atr'] ?? ($currentPrice * 0.01),
-                $isBuy ? 'BUY' : 'SELL'
-            ),
+            'forecast_path' => $forecastPath,
             'summary' => "Engine V4.2 (Multi-Step): {$overallSignal}. RR: " . round($riskReward, 2) . ". Consistency: {$persistence} bars. Market is {$marketRegime}. R2: " . round($mlResult['r_squared'] ?? 0, 2) . "."
         ];
     }
@@ -227,33 +239,27 @@ class PredictionService
 
     private function initializeCategories(float $lastAdx, array $currSt): array 
     {
-        $adxWeightBoost = 0;
-        if ($lastAdx > 35) $adxWeightBoost = 10;
-        elseif ($lastAdx > 25) $adxWeightBoost = 5;
+        $adxWeightBoost = ($lastAdx > 35) ? 10 : (($lastAdx > 25) ? 5 : 0);
 
         if ($lastAdx < 25 && $currSt['trend'] == 0) {
-            $weightTrend = 10;
-            $weightMomentum = 30;
-            $weightMACD = 10;
-            $weightVolume = 15;
-            $weightStructure = 20;
-            $weightPriceAction = 15;
-        } else {
-            $weightTrend = 40 + $adxWeightBoost;
-            $weightMomentum = 10; 
-            $weightMACD = 15;
-            $weightVolume = 15;
-            $weightStructure = 10;
-            $weightPriceAction = 10;
+            return [
+                'Trend' => ['buy' => 0, 'sell' => 0, 'weight' => 10],
+                'Momentum' => ['buy' => 0, 'sell' => 0, 'weight' => 30],
+                'MACD' => ['buy' => 0, 'sell' => 0, 'weight' => 10],
+                'Volume' => ['buy' => 0, 'sell' => 0, 'weight' => 15],
+                'Structure' => ['buy' => 0, 'sell' => 0, 'weight' => 20],
+                'Price Action' => ['buy' => 0, 'sell' => 0, 'weight' => 15],
+                'Advanced' => ['buy' => 0, 'sell' => 0, 'weight' => 25],
+            ];
         }
 
         return [
-            'Trend' => ['buy' => 0, 'sell' => 0, 'weight' => $weightTrend],
-            'Momentum' => ['buy' => 0, 'sell' => 0, 'weight' => $weightMomentum],
-            'MACD' => ['buy' => 0, 'sell' => 0, 'weight' => $weightMACD],
-            'Volume' => ['buy' => 0, 'sell' => 0, 'weight' => $weightVolume],
-            'Structure' => ['buy' => 0, 'sell' => 0, 'weight' => $weightStructure],
-            'Price Action' => ['buy' => 0, 'sell' => 0, 'weight' => $weightPriceAction],
+            'Trend' => ['buy' => 0, 'sell' => 0, 'weight' => 40 + $adxWeightBoost],
+            'Momentum' => ['buy' => 0, 'sell' => 0, 'weight' => 10],
+            'MACD' => ['buy' => 0, 'sell' => 0, 'weight' => 15],
+            'Volume' => ['buy' => 0, 'sell' => 0, 'weight' => 15],
+            'Structure' => ['buy' => 0, 'sell' => 0, 'weight' => 10],
+            'Price Action' => ['buy' => 0, 'sell' => 0, 'weight' => 10],
             'Advanced' => ['buy' => 0, 'sell' => 0, 'weight' => 25],
         ];
     }
@@ -262,18 +268,20 @@ class PredictionService
     {
         $wEmaShort = $categories['Trend']['weight'] * 0.3;
         $ema9Arr = $this->ta->calculateEMA($closes, 9);
-        $ema9 = end($ema9Arr);
+        $ema9 = end($ema9Arr) ?: $currentPrice;
         $ema21Arr = $this->ta->calculateEMA($closes, 21);
-        $ema21 = end($ema21Arr);
+        $ema21 = end($ema21Arr) ?: $currentPrice;
+        
         if ($ema9 > $ema21) { $categories['Trend']['buy'] += $wEmaShort; $sig = 'BUY'; }
         else { $categories['Trend']['sell'] += $wEmaShort; $sig = 'SELL'; }
         $indicatorsList[] = ['name' => 'EMA 9/21', 'value' => round($ema9,2).'/'.round($ema21,2), 'signal' => $sig];
 
         $wEmaLong = $categories['Trend']['weight'] * 0.3;
         $ema50Arr = $this->ta->calculateEMA($closes, 50);
-        $ema50 = end($ema50Arr);
+        $ema50 = end($ema50Arr) ?: $currentPrice;
         $ema200Arr = $this->ta->calculateEMA($closes, 200);
-        $ema200 = end($ema200Arr);
+        $ema200 = end($ema200Arr) ?: $currentPrice;
+        
         if ($ema50 > $ema200) { $categories['Trend']['buy'] += $wEmaLong; $sig = 'BUY'; }
         else { $categories['Trend']['sell'] += $wEmaLong; $sig = 'SELL'; }
         $indicatorsList[] = ['name' => 'EMA 50/200', 'value' => round($ema50,2).'/'.round($ema200,2), 'signal' => $sig];
@@ -317,7 +325,7 @@ class PredictionService
         
         $wRsi = $weightMomentum * 0.3;
         $rsiArr = $this->ta->calculateRSI($closes);
-        $rsi = end($rsiArr);
+        $rsi = end($rsiArr) ?: 50;
         
         if ($isStrongTrend) {
             if ($rsi > 60) { $categories['Momentum']['buy'] += $wRsi; $sig = 'BUY (Mom)'; }
@@ -410,14 +418,14 @@ class PredictionService
 
         $wVwap = $weightVolume * 0.25;
         $vwapArr = $this->ta->calculateVWAP($klines);
-        $vwap = end($vwapArr);
+        $vwap = end($vwapArr) ?: $currentPrice;
         if ($currentPrice > $vwap) { $categories['Volume']['buy'] += $wVwap; $sig = 'BUY'; }
         else { $categories['Volume']['sell'] += $wVwap; $sig = 'SELL'; }
         $indicatorsList[] = ['name' => 'VWAP', 'value' => round($vwap, 2), 'signal' => $sig];
 
         $wCmf = $weightVolume * 0.25;
         $cmfArr = $this->ta->calculateCMF($klines);
-        $cmf = end($cmfArr);
+        $cmf = end($cmfArr) ?: 0;
         if ($cmf > 0.1) { $categories['Volume']['buy'] += $wCmf; $sig = 'BUY'; }
         elseif ($cmf < -0.1) { $categories['Volume']['sell'] += $wCmf; $sig = 'SELL'; }
         else { $sig = 'NEUTRAL'; }
@@ -440,7 +448,10 @@ class PredictionService
         
         $wBB = $weightStructure * 0.50;
         if (!empty($bb['upper'])) {
-            $upper = end($bb['upper']); $lower = end($bb['lower']);
+            $upperArr = $bb['upper'];
+            $upper = end($upperArr);
+            $lowerArr = $bb['lower'];
+            $lower = end($lowerArr);
             if ($currentPrice <= $lower * 1.005) { $categories['Structure']['buy'] += $wBB; $sig = 'BUY'; }
             elseif ($currentPrice >= $upper * 0.995) { $categories['Structure']['sell'] += $wBB; $sig = 'SELL'; }
             else { $sig = 'NEUTRAL'; }
@@ -495,11 +506,21 @@ class PredictionService
         
         if (!isset($mlResult['error'])) {
             $forecast = $mlResult['forecast'];
-            $r2 = $mlResult['r_squared'];
+            $r2 = $mlResult['r_squared'] ?? 0;
+            $conf = $mlResult['confidence_score'] ?? 50;
             $lastPred = !empty($forecast) ? end($forecast) : $currentPrice;
-            if ($lastPred > $currentPrice && $r2 > 0.5) { $categories['Advanced']['buy'] += 15; $mlSig = 'BULLISH (XGB)'; }
-            elseif ($lastPred < $currentPrice && $r2 > 0.5) { $categories['Advanced']['sell'] += 15; $mlSig = 'BEARISH (XGB)'; }
-            $indicatorsList[] = ['name' => 'XGBoost ML', 'value' => 'R2:'.round($r2, 2), 'signal' => $mlSig];
+            
+            // Adjust weights based on ML confidence
+            $weightMult = ($conf > 80) ? 2 : (($conf > 60) ? 1.5 : 1);
+            
+            if ($lastPred > $currentPrice && $r2 > 0.3) { 
+                $categories['Advanced']['buy'] += (15 * $weightMult); 
+                $mlSig = 'BULLISH (XGB)'; 
+            } elseif ($lastPred < $currentPrice && $r2 > 0.3) { 
+                $categories['Advanced']['sell'] += (15 * $weightMult); 
+                $mlSig = 'BEARISH (XGB)'; 
+            }
+            $indicatorsList[] = ['name' => 'XGBoost ML', 'value' => "Conf: {$conf}%", 'signal' => $mlSig];
             $lr = $this->ml->predictLinearRegression($closes, $forecastSteps);
         } else {
             $lr = $this->ml->predictLinearRegression($closes, $forecastSteps);
@@ -579,13 +600,13 @@ class PredictionService
         return false;
     }
 
-    private function applyContextualConflunceCheck(string &$overallSignal, float &$confidence, bool $volatilityFilter, array $currSt, array $lr, array $currSqueeze, float $denoisedPrice, float $currentPrice, float $totalBuy, float $totalSell): void
+    private function applyContextualConfluenceCheck(string &$overallSignal, float &$confidence, bool $volatilityFilter, array $currSt, array $lr, array $currSqueeze, float $denoisedPrice, float $currentPrice, float $totalBuy, float $totalSell): void
     {
         if ($overallSignal !== 'NEUTRAL' && !$volatilityFilter) {
             $isBuy = str_contains($overallSignal, 'BUY');
             
             if (($isBuy && $currSt['trend'] == -1) || (!$isBuy && $currSt['trend'] == 1)) {
-                $confidence *= 0.6; // Counter-trend penalty increased
+                $confidence *= 0.6; 
                 $overallSignal .= " (C-Trend)";
             }
             
@@ -611,8 +632,12 @@ class PredictionService
         $marketRegime = $currSqueeze['is_squeeze'] ? 'SQUEEZING' : 'TRENDING';
         if ($trendStrength === 'WEAK' && !$currSqueeze['is_squeeze']) {
             $marketRegime = 'RANGING';
-        } elseif (isset($bb['upper'], $bb['lower']) && (end($bb['upper']) - end($bb['lower'])) / $currentPrice > 0.05) {
-            $marketRegime = 'VOLATILE';
+        } elseif (isset($bb['upper'], $bb['lower'])) {
+            $upperArr = $bb['upper'];
+            $lowerArr = $bb['lower'];
+            if ((end($upperArr) - end($lowerArr)) / max($currentPrice, 1) > 0.05) {
+                $marketRegime = 'VOLATILE';
+            }
         }
         return $marketRegime;
     }
@@ -622,12 +647,14 @@ class PredictionService
         $htfAligned = false;
         if (!empty($htfKlines) && count($htfKlines) >= 200) {
             $htfCloses = array_column($htfKlines, 'close');
-            $htfEma50Arr = $this->ta->calculateEMA($htfCloses, 50); $htfEma50 = end($htfEma50Arr);
-            $htfEma200Arr = $this->ta->calculateEMA($htfCloses, 200); $htfEma200 = end($htfEma200Arr);
+            $htfEma50Arr = $this->ta->calculateEMA($htfCloses, 50);
+            $htfEma50 = end($htfEma50Arr);
+            $htfEma200Arr = $this->ta->calculateEMA($htfCloses, 200);
+            $htfEma200 = end($htfEma200Arr);
 
             if ($htfEma50 > $htfEma200) {
                 if (in_array($overallSignal, ['SELL', 'STRONG SELL', 'ULTRA SELL'])) {
-                    $confidence *= 0.5; // Heavy HTF penalty
+                    $confidence *= 0.5;
                     $indicatorsList[] = ['name' => 'HTF Confluence', 'value' => 'Against HTF Bull', 'signal' => 'DANGER'];
                 } elseif (str_contains($overallSignal, 'BUY')) {
                     $confidence = min(100, $confidence + 15);
@@ -636,7 +663,7 @@ class PredictionService
                 }
             } elseif ($htfEma50 < $htfEma200) {
                 if (in_array($overallSignal, ['BUY', 'STRONG BUY', 'ULTRA BUY'])) {
-                    $confidence *= 0.5; // Heavy HTF penalty
+                    $confidence *= 0.5;
                     $indicatorsList[] = ['name' => 'HTF Confluence', 'value' => 'Against HTF Bear', 'signal' => 'DANGER'];
                 } elseif (str_contains($overallSignal, 'SELL')) {
                     $confidence = min(100, $confidence + 15);
@@ -650,16 +677,16 @@ class PredictionService
 
     private function handleSignalPersistence(string $symbol, string $interval, string $overallSignal): int
     {
-        $prevSignal = \Illuminate\Support\Facades\Cache::get("last_sig_{$symbol}_{$interval}");
-        $persistence = (int) \Illuminate\Support\Facades\Cache::get("sig_persist_{$symbol}_{$interval}", 0);
+        $prevSignal = Cache::get("last_sig_{$symbol}_{$interval}");
+        $persistence = (int) Cache::get("sig_persist_{$symbol}_{$interval}", 0);
         
         if ($prevSignal === $overallSignal && $overallSignal !== 'NEUTRAL') {
             $persistence++;
         } else {
             $persistence = 0;
-            \Illuminate\Support\Facades\Cache::put("last_sig_{$symbol}_{$interval}", $overallSignal, 600);
+            Cache::put("last_sig_{$symbol}_{$interval}", $overallSignal, 600);
         }
-        \Illuminate\Support\Facades\Cache::put("sig_persist_{$symbol}_{$interval}", $persistence, 600);
+        Cache::put("sig_persist_{$symbol}_{$interval}", $persistence, 600);
         return $persistence;
     }
 
@@ -682,12 +709,12 @@ class PredictionService
     {
         $risk = abs($currentPrice - $sl);
         $reward = abs($tp - $currentPrice);
-        return $risk > 0 ? $reward / $risk : 0;
+        return $risk > 0.0000001 ? $reward / $risk : 0;
     }
 
     private function applyRiskRewardFilter(array &$indicatorsList, string &$overallSignal, float &$confidence, float $riskReward): void
     {
-        if ($overallSignal !== 'NEUTRAL' && $riskReward < 1.3) {
+        if ($overallSignal !== 'NEUTRAL' && $riskReward < 1.3 && $riskReward > 0) {
             $confidence *= 0.5;
             $overallSignal .= " (Low RR)";
             $indicatorsList[] = ['name' => 'RR Filter', 'value' => round($riskReward, 2), 'signal' => 'POOR'];

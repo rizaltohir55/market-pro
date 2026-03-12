@@ -495,7 +495,7 @@ class MultiSourceMarketService extends BaseMarketService
     {
         return Cache::remember('macro_fear_greed', 300, function () {
             try {
-                $res = Http::timeout(5)->get('https://api.alternative.me/fng/?limit=1');
+                $res = Http::withOptions($this->getHttpOptions(5))->get('https://api.alternative.me/fng/?limit=1');
                 if ($res->successful()) {
                     $json = $res->json();
                     if (isset($json['data'][0]['value'])) {
@@ -519,7 +519,7 @@ class MultiSourceMarketService extends BaseMarketService
         return Cache::remember("macro_ls_ratio_{$symbol}", 300, function () use ($symbol) {
             try {
                 // Using Binance Futures API for Global Long/Short Ratio
-                $res = Http::timeout(5)->get('https://fapi.binance.com/futures/data/globalLongShortAccountRatio', [
+                $res = Http::withOptions($this->getHttpOptions(5))->get('https://fapi.binance.com/futures/data/globalLongShortAccountRatio', [
                     'symbol' => $symbol,
                     'period' => '5m',
                     'limit' => 1
@@ -552,7 +552,7 @@ class MultiSourceMarketService extends BaseMarketService
 
         $result = (function () {
             try {
-                $res = Http::timeout(8)->retry(3, 200)->get('https://api.coingecko.com/api/v3/search/trending');
+                $res = Http::withOptions($this->getHttpOptions(8))->retry(3, 200)->get('https://api.coingecko.com/api/v3/search/trending');
                 if ($res->successful()) {
                     $json = $res->json();
                     if (isset($json['coins']) && is_array($json['coins'])) {

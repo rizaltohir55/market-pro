@@ -16,6 +16,7 @@
     <script src="/js/ta-math.js"></script>
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <link rel="icon" type="image/svg+xml" href="/images/logo.svg">
 
     <style>
         [v-cloak] { display: none !important; }
@@ -47,7 +48,25 @@
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <span class="sidebar-logo">
-                    <svg class="logo-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+                    <svg class="logo-icon" width="24" height="24" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:var(--accent);stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:var(--accent2);stop-opacity:1" />
+                            </linearGradient>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <path d="M20 2L36 11V29L20 38L4 29V11L20 2Z" stroke="url(#logo-grad)" stroke-width="2" stroke-linejoin="round" fill="rgba(0, 240, 255, 0.05)" />
+                        <path d="M10 28V16L20 25L30 14" stroke="url(#logo-grad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)" />
+                        <circle cx="10" cy="28" r="1.5" fill="var(--accent)" />
+                        <circle cx="30" cy="14" r="1.5" fill="var(--accent2)" />
+                    </svg>
                     <span>MARKET<span class="logo-pro">PRO</span></span>
                 </span>
                 <button aria-label="Close Sidebar" class="btn btn-ghost btn-icon sidebar-close-btn" id="sidebar-close">

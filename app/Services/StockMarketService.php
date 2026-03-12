@@ -641,8 +641,8 @@ class StockMarketService extends BaseMarketService
 
                 // 2. ML Service Price Target (Robust yfinance fallback)
                 $mlUrl = config('services.ml.url') . '/stock/data?symbol=' . urlencode($symbol);
-                $rML = Http::withHeaders(['X-ML-Key' => config('services.ml.key')])
-                    ->timeout(5)
+                $rML = Http::withOptions($this->getHttpOptions(5))
+                    ->withHeaders(['X-ML-Key' => config('services.ml.key')])
                     ->get($mlUrl);
                 
                 if ($rML->successful()) {

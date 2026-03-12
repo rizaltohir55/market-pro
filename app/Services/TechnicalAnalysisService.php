@@ -806,7 +806,7 @@ class TechnicalAnalysisService
 
             $currentTrend = end($trend);
             $results[] = [
-                'time' => $klines[$idx]['time'],
+                'time' => $klines[$idx]['time'] ?? ($klines[$idx]['timestamp'] ?? time()),
                 'value' => ($currentTrend == 1) ? $lowerBand : $upperBand,
                 'trend' => $currentTrend
             ];
@@ -956,7 +956,7 @@ class TechnicalAnalysisService
      * Calculate Dynamic High-Accuracy Take Profit and Stop Loss levels.
      * Uses ATR for volatility and Fibonacci Pivots for structural alignment.
      */
-    public function calculateDynamicTPBL(array $klines, string $side = 'BUY', float $tpMult = 1.5, float $slMult = 1.0): array
+    public function calculateDynamicTPSL(array $klines, string $side = 'BUY', float $tpMult = 1.5, float $slMult = 1.0): array
     {
         $lastClose = end($klines)['close'];
         $atrHist = $this->calculateATR($klines, 14);

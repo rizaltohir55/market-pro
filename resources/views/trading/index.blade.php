@@ -181,28 +181,32 @@
                                     <div class="signal-confidence" id="signal-conf-text" style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono); margin-top:5px">CALC%</div>
                                 </div>
                             </div>
-                            <div class="signal-label" style="text-transform:uppercase;color:var(--text-secondary);font-size:0.7rem;letter-spacing:2px;text-align:center;">Composite Analysis</div>
+                            <div class="signal-label" style="text-transform:uppercase;color:var(--text-secondary);font-size:0.7rem;letter-spacing:2px;text-align:center;">AI Recommendation</div>
                         </div>
                     
                     <div id="prediction-targets" style="display:none;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:var(--radius-md);padding:var(--space-3);margin-bottom:var(--space-4);">
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);text-align:center;font-size:0.8125rem">
-                            <div><span class="text-muted" style="font-size:0.6875rem;text-transform:uppercase">Target (TP)</span><br><span id="target-tp" class="text-success text-mono fw-bold" style="text-shadow:0 0 8px rgba(52,211,153,0.4)">—</span></div>
-                            <div><span class="text-muted" style="font-size:0.6875rem;text-transform:uppercase">Stop Loss (SL)</span><br><span id="target-sl" class="text-danger text-mono fw-bold" style="text-shadow:0 0 8px rgba(248,113,113,0.4)">—</span></div>
+                            <div><span class="text-muted" style="font-size:0.6875rem;text-transform:uppercase">Take Profit (TP)</span><br><span id="target-tp" class="text-success text-mono fw-bold" style="text-shadow:0 0 8px rgba(52,211,153,0.4)">—</span></div>
+                            <div><span class="text-muted" style="font-size:0.6875rem;text-transform:uppercase">Cut Loss (SL)</span><br><span id="target-sl" class="text-danger text-mono fw-bold" style="text-shadow:0 0 8px rgba(248,113,113,0.4)">—</span></div>
                         </div>
-                        <div style="margin-top:var(--space-3);text-align:center;font-size:0.75rem;color:var(--text-muted);border-top:1px solid rgba(255,255,255,0.05);padding-top:8px">
-                            Risk/Reward: <span id="target-rr" class="text-mono" style="color:var(--text-primary)">1.5</span>x | Trend ADX: <span id="trend-strength">WEAK</span>
+                        <div style="margin-top:var(--space-3);text-align:center;font-size:0.75rem;color:var(--text-muted);border-top:1px solid rgba(255,255,255,0.05);padding-top:8px" id="ml-explainability-container">
+                            <!-- Explainability features will be injected here -->
                         </div>
                     </div>
 
-                    <div class="text-caption" style="margin-bottom:var(--space-2)">Category Breakdown</div>
-                    <div class="category-list" id="category-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-2)">
-                        <div class="skeleton skeleton-text" style="width:100%"></div>
-                        <div class="skeleton skeleton-text" style="width:80%"></div>
-                        <div class="skeleton skeleton-text" style="width:90%"></div>
-                    </div>
+                    <button class="btn btn-ghost btn-sm" id="btn-toggle-advanced-ai" style="width: 100%; text-transform: uppercase; letter-spacing: 1px; font-size: 0.65rem; color: var(--text-muted); border: 1px dashed rgba(255,255,255,0.1);">Show Advanced Details ▾</button>
+                    
+                    <div id="advanced-ai-details" style="display:none; margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid rgba(255,255,255,0.05);">
+                        <div class="text-caption" style="margin-bottom:var(--space-2)">Category Breakdown</div>
+                        <div class="category-list" id="category-list" style="display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-2)">
+                            <div class="skeleton skeleton-text" style="width:100%"></div>
+                            <div class="skeleton skeleton-text" style="width:80%"></div>
+                            <div class="skeleton skeleton-text" style="width:90%"></div>
+                        </div>
 
-                    <div class="text-caption" style="margin-bottom:var(--space-2)">Raw Indicators</div>
-                    <div id="indicator-list" style="display:flex;flex-direction:column;"></div>
+                        <div class="text-caption" style="margin-bottom:var(--space-2); margin-top:var(--space-4);">Raw Indicators</div>
+                        <div id="indicator-list" style="display:flex;flex-direction:column;"></div>
+                    </div>
                 </div>
             </div>
         @else
@@ -485,6 +489,18 @@ function initChartTools() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('mode') === 'gp') {
         gpPanel.style.display = 'block';
+    }
+
+    // 3. Advanced Settings UI Binding
+    const advBtn = document.getElementById('btn-toggle-advanced-ai');
+    const advPanel = document.getElementById('advanced-ai-details');
+    if (advBtn && advPanel && !advBtn.dataset.bound) {
+        advBtn.dataset.bound = "true";
+        advBtn.addEventListener('click', () => {
+            const isHidden = advPanel.style.display === 'none';
+            advPanel.style.display = isHidden ? 'block' : 'none';
+            advBtn.textContent = isHidden ? 'Hide Advanced Details ▴' : 'Show Advanced Details ▾';
+        });
     }
 
     document.querySelectorAll('.indicator-toggle').forEach(cb => {
@@ -786,7 +802,9 @@ function renderPrediction(data) {
     }
     
     if (hudConf) {
-        hudConf.textContent = `${conf}% CONF`;
+        // Switch between total confidence and ML confidence depending on signal purity
+        const dispConf = data.ml_confidence !== undefined ? data.ml_confidence : conf;
+        hudConf.textContent = `${dispConf}% CONFIDENCE`;
         if (sigClass === 'buy') hudConf.style.color = 'var(--success)';
         else if (sigClass === 'sell') hudConf.style.color = 'var(--danger)';
         else hudConf.style.color = 'var(--text-muted)';
@@ -818,6 +836,15 @@ function renderPrediction(data) {
         mrBadge.style.display = 'inline-block';
         mrBadge.textContent = data.market_regime;
         mrBadge.className = `badge text-small ${data.market_regime === 'TRENDING' ? 'badge-buy' : 'badge-neutral'}`;
+    }
+    
+    const explainEl = document.getElementById('ml-explainability-container');
+    if (explainEl) {
+        if (data.ml_explainability && data.ml_explainability.length > 0) {
+            explainEl.innerHTML = `<div style="margin-bottom:4px">Alasan ML:</div> <div style="color:var(--text-secondary); font-size: 0.65rem;">${data.ml_explainability.join(', ')}</div>`;
+        } else {
+            explainEl.innerHTML = `Risk/Reward: <span class="text-mono" style="color:var(--text-primary)">${data.risk_reward}</span>x | Trend ADX: <span>${data.trend_strength}</span>`;
+        }
     }
 
     // 3. Category Breakdown (New Multi-layer view)
